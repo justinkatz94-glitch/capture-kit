@@ -23,6 +23,7 @@ from automation.trending_scanner import TrendingScanner
 from automation.feedback_loop import FeedbackLoop
 from automation.voice_evolver import VoiceEvolver
 from automation.follow_targeting import FollowTargetingManager
+from automation.platforms import get_adapter, list_platforms
 
 
 def cmd_user_create(args):
@@ -176,12 +177,20 @@ def cmd_draft(args):
         print("No active user. Create or switch to a user first.")
         return
 
+    platform = getattr(args, 'platform', 'twitter')
+
     # Try to use LLM generator
     generator = LLMGenerator()
     analyzer = ContentAnalyzer()
 
+    # Get platform adapter
+    try:
+        adapter = get_adapter(platform)
+    except ValueError:
+        adapter = None
+
     # Generate replies
-    print(f"Generating replies to @{args.author}...")
+    print(f"Generating {platform.upper()} replies to @{args.author}...")
     print(f"Content: {args.content[:100]}...")
     print()
 
@@ -192,18 +201,32 @@ def cmd_draft(args):
 
     replies = generator.generate_replies(
         original_post=original_post,
+        platform=platform,
         num_replies=args.count
     )
 
     for i, reply in enumerate(replies, 1):
         # Reply is a GeneratedReply object
         reply_content = reply.content if hasattr(reply, 'content') else str(reply)
-        analysis = analyzer.analyze(reply_content, "twitter")
+
+        # Format for platform if adapter available
+        if adapter:
+            reply_content = adapter.format_for_platform(reply_content, "reply")
+
+        analysis = analyzer.analyze(reply_content, platform)
         word_count = len(reply_content.split())
+        char_count = len(reply_content)
+
+        # Get platform-specific score
+        if adapter:
+            platform_result = adapter.score_platform_fit(reply_content, "reply")
+            score = platform_result["score"]
+        else:
+            score = analysis.platform_score
 
         print(f"Reply {i}:")
         print(f"  {reply_content}")
-        print(f"  [{word_count} words | Hook: {analysis.hook_type or 'none'} | Triggers: {', '.join(analysis.triggers[:2]) or 'none'}]")
+        print(f"  [{word_count} words, {char_count} chars | Hook: {analysis.hook_type or 'none'} | Platform fit: {score}%]")
         print()
 
 
@@ -414,20 +437,36 @@ def cmd_analyze(args):
     analyzer = ContentAnalyzer()
     analysis = analyzer.analyze(args.content, args.platform)
 
-    print("Content Analysis")
+    # Get platform adapter for additional analysis
+    try:
+        adapter = get_adapter(args.platform)
+        platform_result = adapter.score_platform_fit(args.content, args.content_type)
+    except ValueError:
+        adapter = None
+        platform_result = None
+
+    print(f"Content Analysis ({args.platform.upper()})")
     print(f"{'='*40}")
     print(f"Words: {analysis.word_count} | Chars: {analysis.char_count}")
     print()
     print(f"Hook: {analysis.hook_type or 'none'} (strength: {analysis.hook_strength:.0%})")
-    print(f"  \"{analysis.hook_text[:60]}...\"")
+    if analysis.hook_text:
+        print(f"  \"{analysis.hook_text[:60]}...\"")
     print()
     print(f"Framework: {analysis.framework}")
     print(f"Triggers: {', '.join(analysis.triggers) or 'none'}")
     print(f"Specificity: {analysis.specificity}")
     print()
-    print(f"Platform fit: {analysis.platform_score:.0f}%")
-    for issue in analysis.platform_issues:
-        print(f"  ! {issue}")
+
+    # Platform-specific scoring
+    if platform_result:
+        print(f"Platform fit ({args.platform}): {platform_result['score']}%")
+        for issue in platform_result.get('issues', []):
+            print(f"  ! {issue}")
+    else:
+        print(f"Platform fit: {analysis.platform_score:.0f}%")
+        for issue in analysis.platform_issues:
+            print(f"  ! {issue}")
     print()
 
     if analysis.strengths:
@@ -439,6 +478,77 @@ def cmd_analyze(args):
         print("Weaknesses:")
         for w in analysis.weaknesses:
             print(f"  - {w}")
+
+
+# =============================================================================
+# PLATFORM COMMANDS
+# =============================================================================
+
+def cmd_platforms_list(args):
+    """List all available platforms."""
+    platforms = list_platforms()
+    print("Available Platforms:")
+    print(f"{'='*40}")
+    for platform in platforms:
+        adapter = get_adapter(platform)
+        print(f"\n{platform.upper()}")
+        if adapter.post_length:
+            print(f"  Post length: {adapter.post_length.optimal_min}-{adapter.post_length.optimal_max} chars")
+        if adapter.reply_length:
+            print(f"  Reply length: {adapter.reply_length.optimal_min}-{adapter.reply_length.optimal_max} chars")
+        print(f"  Best hooks: {', '.join(adapter.effective_hooks[:4])}")
+
+
+def cmd_platforms_show(args):
+    """Show detailed rules for a platform."""
+    try:
+        adapter = get_adapter(args.platform)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return
+
+    print(f"{adapter.platform_name.upper()} Platform Rules")
+    print(f"{'='*50}")
+
+    # Length configs
+    print("\nContent Length Requirements:")
+    if adapter.post_length:
+        print(f"  Post: {adapter.post_length.min}-{adapter.post_length.max} chars (optimal: {adapter.post_length.optimal_min}-{adapter.post_length.optimal_max})")
+    if adapter.reply_length:
+        print(f"  Reply: {adapter.reply_length.min}-{adapter.reply_length.max} chars (optimal: {adapter.reply_length.optimal_min}-{adapter.reply_length.optimal_max})")
+    if adapter.comment_length and adapter.comment_length != adapter.reply_length:
+        print(f"  Comment: {adapter.comment_length.min}-{adapter.comment_length.max} chars (optimal: {adapter.comment_length.optimal_min}-{adapter.comment_length.optimal_max})")
+
+    # Best times
+    if adapter.best_times:
+        print("\nBest Posting Times:")
+        for window in adapter.best_times:
+            print(f"  - {window.to_string()}")
+
+    if adapter.best_days:
+        print(f"\nBest Days: {', '.join(adapter.best_days)}")
+    if adapter.worst_days:
+        print(f"Worst Days: {', '.join(adapter.worst_days)}")
+
+    # Effective hooks
+    if adapter.effective_hooks:
+        print(f"\nEffective Hooks: {', '.join(adapter.effective_hooks)}")
+
+    # Rules
+    if adapter.rules.get("do"):
+        print("\nDO:")
+        for rule in adapter.rules["do"]:
+            print(f"  + {rule}")
+
+    if adapter.rules.get("dont"):
+        print("\nDON'T:")
+        for rule in adapter.rules["dont"]:
+            print(f"  - {rule}")
+
+    if adapter.rules.get("tips"):
+        print("\nTIPS:")
+        for tip in adapter.rules["tips"]:
+            print(f"  * {tip}")
 
 
 # =============================================================================
@@ -760,6 +870,7 @@ Examples:
     draft_parser.add_argument("--author", default="unknown", help="Original author")
     draft_parser.add_argument("--content", required=True, help="Original content")
     draft_parser.add_argument("--count", type=int, default=3, help="Number of drafts")
+    draft_parser.add_argument("--platform", default="twitter", help="Platform (twitter, linkedin, instagram)")
 
     # Queue commands
     queue_parser = subparsers.add_parser("queue", help="Queue management")
@@ -809,7 +920,18 @@ Examples:
     # Analyze
     analyze_parser = subparsers.add_parser("analyze", help="Analyze content")
     analyze_parser.add_argument("--content", required=True, help="Content to analyze")
-    analyze_parser.add_argument("--platform", default="twitter", help="Platform")
+    analyze_parser.add_argument("--platform", default="twitter", help="Platform (twitter, linkedin, instagram)")
+    analyze_parser.add_argument("--content-type", dest="content_type", default="post",
+                                choices=["post", "reply", "comment"], help="Content type")
+
+    # Platforms commands
+    platforms_parser = subparsers.add_parser("platforms", help="Platform information")
+    platforms_sub = platforms_parser.add_subparsers(dest="platforms_command")
+
+    platforms_sub.add_parser("list", help="List available platforms")
+
+    pshow = platforms_sub.add_parser("show", help="Show platform rules")
+    pshow.add_argument("platform", help="Platform name (twitter, linkedin, instagram)")
 
     # Targets commands
     targets_parser = subparsers.add_parser("targets", help="Follow targeting management")
@@ -929,6 +1051,14 @@ Examples:
 
     elif args.command == "analyze":
         cmd_analyze(args)
+
+    elif args.command == "platforms":
+        if args.platforms_command == "list":
+            cmd_platforms_list(args)
+        elif args.platforms_command == "show":
+            cmd_platforms_show(args)
+        else:
+            platforms_parser.print_help()
 
     elif args.command == "targets":
         if args.targets_command == "add":

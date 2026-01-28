@@ -18,6 +18,15 @@ from .schemas import (
 from .content_analyzer import ContentAnalyzer, analyze_content
 from .user_manager import get_active_profile
 
+# Import platform adapters (lazy to avoid circular imports)
+def _get_platform_adapter(platform: str):
+    """Get platform adapter."""
+    try:
+        from .platforms import get_adapter
+        return get_adapter(platform)
+    except (ImportError, ValueError):
+        return None
+
 # Check for Anthropic SDK
 try:
     import anthropic
@@ -81,6 +90,13 @@ class LLMGenerator:
         if path.exists():
             return load_json(str(path))
         return {}
+
+    def _get_platform_rules(self, platform: str) -> str:
+        """Get platform-specific rules from adapter."""
+        adapter = _get_platform_adapter(platform)
+        if adapter:
+            return adapter.get_system_prompt_rules()
+        return ""
 
     def _build_system_prompt(
         self,
@@ -150,6 +166,8 @@ Effective hook types:
 Platform strategy: {platform_config.get('strategy', '')}
 Target reply length: {platform_prefs.get('reply_length', 80)} chars
 Target post length: {platform_prefs.get('post_length', 240)} chars
+
+{self._get_platform_rules(platform)}
 
 ## GOAL: {goal.upper().replace('_', ' ')}
 
