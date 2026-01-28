@@ -35,7 +35,13 @@ class ReplyGenerator:
         """
         self.profile = self._load_profile(profile_path)
         self.benchmark = self._load_benchmark(benchmark_name)
-        self.target_length = 26  # Optimal words from benchmark
+
+        # Load target length from benchmark patterns
+        patterns = self.benchmark.get("patterns", {})
+        optimal_length = patterns.get("optimal_length", {})
+        self.target_length = int(optimal_length.get("avg", 26))
+        self.min_length = int(optimal_length.get("min", 20))
+        self.max_length = int(optimal_length.get("max", 35))
 
     def _load_profile(self, path: str = None) -> Dict[str, Any]:
         """Load user voice profile."""
@@ -264,13 +270,14 @@ class ReplyGenerator:
             emoji_style=emoji_style
         )
 
-        # Ensure target length
-        reply_text = self._adjust_length(reply_text, self.target_length)
+        # Ensure target length - expand or contract to hit benchmark optimal
+        reply_text = self._adjust_length(reply_text, self.target_length, voice, post_analysis)
 
         return {
             "text": reply_text,
             "type": reply_type,
             "word_count": len(reply_text.split()),
+            "target_length": self.target_length,
             "responding_to": post_analysis.get("topics", []),
         }
 
@@ -279,39 +286,39 @@ class ReplyGenerator:
 
         templates = {
             "agree": [
-                "This is exactly what I've been tracking. {insight}",
-                "Spot on. {insight}",
-                "This aligns with what the flow is showing. {insight}",
-                "Been seeing the same setup. {insight}",
-                "This is the key level to watch. {insight}",
+                "This is exactly what I've been tracking. {insight} - and when you combine that with {nuance}, the setup becomes even clearer.",
+                "Spot on. {insight}. This is why {reason} - most people miss this connection.",
+                "This aligns with what the flow is showing. {insight}. The key variable to watch here is {nuance}.",
+                "Been seeing the same setup. {insight}. What makes this particularly interesting is {reason}.",
+                "Nailed it. {insight}. From a positioning standpoint, {nuance} is what I'm watching most closely.",
             ],
             "insight": [
-                "Worth noting - {insight}. This matters because {reason}.",
-                "Adding context: {insight}",
-                "The key here is {insight}. {follow_up}",
-                "From a {topic} perspective: {insight}",
-                "{insight}. This is what the data suggests.",
+                "Worth noting - {insight}. This matters because {reason}. The follow-through here could be significant.",
+                "Adding context: {insight}. What most people miss is {reason}. {follow_up}",
+                "The key here is {insight}. When you factor in {nuance}, it paints a clearer picture. {follow_up}",
+                "From a {topic} perspective: {insight}. This is particularly relevant because {reason}.",
+                "{insight}. Combined with {nuance}, this is what the data suggests. Worth watching closely.",
             ],
             "question": [
-                "Curious about the {topic} side of this - how does that factor in?",
-                "What's your read on {topic} given this setup?",
-                "How are you positioning around {topic}?",
-                "Interesting. What levels are you watching for {topic}?",
-                "Does this change your view on {topic}?",
+                "Curious about the {topic} side of this - how does that factor into your thesis? Especially given {nuance}.",
+                "What's your read on {topic} given this setup? I'm seeing {insight} which could change the dynamics.",
+                "How are you positioning around {topic}? The {nuance} aspect seems like it could accelerate moves either way.",
+                "Interesting breakdown. What levels are you watching where {topic} flips? That's usually where the real acceleration happens.",
+                "Does this change your view on {topic}? I've been tracking {insight} which seems to confirm this thesis.",
             ],
             "nuance": [
-                "Generally agree, but {nuance}",
-                "True, though worth considering {nuance}",
-                "This is right, but {nuance} is the key variable",
-                "Solid read. One thing to watch: {nuance}",
-                "Yes, and {nuance} could amplify this",
+                "Generally agree, but {nuance} is the wildcard here. If that shifts, {insight} could play out differently.",
+                "True, though worth considering {nuance}. That's often the variable that catches people off guard when {reason}.",
+                "Solid analysis. The one thing I'd add: {nuance} is the key variable. When that aligns with {insight}, moves accelerate.",
+                "This is right, and {nuance} could amplify this significantly. I'm watching for {insight} as confirmation.",
+                "Yes, and {nuance} tends to be underappreciated here. Combined with {insight}, the setup is clean.",
             ],
             "answer": [
-                "From what I'm seeing: {insight}",
-                "The data suggests {insight}",
-                "Based on positioning: {insight}",
-                "Short answer: {insight}",
-                "{insight}. That's my read.",
+                "From what I'm seeing: {insight}. The data supports this because {reason}. Key level to watch.",
+                "The data suggests {insight}. What confirms this is {nuance}. That's the signal I'm tracking.",
+                "Based on positioning: {insight}. This matters because {reason}. The setup looks clean from here.",
+                "My read: {insight}. When you combine that with {nuance}, the picture becomes clearer. {follow_up}",
+                "{insight}. The reason this matters: {reason}. I'm positioned accordingly.",
             ],
         }
 
@@ -458,16 +465,130 @@ class ReplyGenerator:
 
         return text.strip()
 
-    def _adjust_length(self, text: str, target_words: int) -> str:
-        """Adjust reply length to target."""
+    def _adjust_length(self, text: str, target_words: int, voice: Dict, post_analysis: Dict) -> str:
+        """Adjust reply length to hit target using voice profile data."""
         words = text.split()
         current_length = len(words)
 
+        # If too long, truncate intelligently
         if current_length > target_words + 5:
-            # Truncate to target
             text = " ".join(words[:target_words])
             if not text.endswith((".", "!", "?")):
                 text += "."
+            return text
+
+        # If too short, expand using signature phrases and contextual additions
+        if current_length < target_words - 3:
+            text = self._expand_reply(text, target_words, voice, post_analysis)
+
+        return text
+
+    def _expand_reply(self, text: str, target_words: int, voice: Dict, post_analysis: Dict) -> str:
+        """Expand a short reply to hit the target word count."""
+        words = text.split()
+        current_length = len(words)
+        topics = post_analysis.get("topics", [])
+
+        # Expansion phrases based on context
+        expansions = {
+            "transitions": [
+                "This is particularly relevant because",
+                "What makes this interesting is",
+                "The key factor here is",
+                "Worth noting that",
+                "From a positioning standpoint,",
+            ],
+            "amplifiers": [
+                "- and when that happens, moves tend to accelerate.",
+                "- this is where most people get caught off guard.",
+                "- the data has been consistent on this.",
+                "- I've been tracking this closely.",
+                "- the setup looks clean from here.",
+            ],
+            "closers": [
+                "Key level to watch.",
+                "Will be monitoring this closely.",
+                "The setup is there.",
+                "Watching for confirmation.",
+                "This is the signal.",
+            ],
+            "topic_specific": {
+                "options": [
+                    "Options flow confirms this thesis.",
+                    "IV is pricing this in already.",
+                    "The premium sellers are feeling this.",
+                ],
+                "gamma": [
+                    "Gamma positioning supports this view.",
+                    "Dealer hedging will amplify the move.",
+                    "GEX levels confirm this setup.",
+                ],
+                "volatility": [
+                    "Vol regime is shifting here.",
+                    "Realized vs implied tells the story.",
+                    "VIX term structure aligns with this.",
+                ],
+                "market": [
+                    "Market internals confirm this.",
+                    "Breadth supports the move.",
+                    "Price action is clean here.",
+                ],
+            }
+        }
+
+        # Add signature phrases from voice profile
+        signature_phrases = voice.get("signature_phrases", [])
+
+        # Strategy: Add contextual expansions until we hit target
+        attempts = 0
+        max_attempts = 5
+
+        while len(text.split()) < target_words - 2 and attempts < max_attempts:
+            attempts += 1
+            current_words = len(text.split())
+            words_needed = target_words - current_words
+
+            # Choose expansion based on what's needed
+            if words_needed > 8 and not any(t in text.lower() for t in ["because", "when", "what makes"]):
+                # Add a transition phrase
+                expansion = random.choice(expansions["transitions"])
+                if not text.endswith((".", "!", "?")):
+                    text += "."
+                text += f" {expansion}"
+
+                # Add topic-specific content
+                for topic in topics:
+                    if topic in expansions["topic_specific"]:
+                        topic_addition = random.choice(expansions["topic_specific"][topic])
+                        text += f" {topic_addition}"
+                        break
+
+            elif words_needed > 5:
+                # Add an amplifier
+                amplifier = random.choice(expansions["amplifiers"])
+                # Remove trailing punctuation before adding amplifier
+                text = text.rstrip(".")
+                text += amplifier
+
+            elif words_needed > 2 and signature_phrases:
+                # Add a signature phrase
+                phrase = random.choice(signature_phrases)
+                if phrase not in text:
+                    if not text.endswith((".", "!", "?")):
+                        text += "."
+                    text += f" {phrase}"
+
+            else:
+                # Add a closer
+                closer = random.choice(expansions["closers"])
+                if closer not in text:
+                    if not text.endswith((".", "!", "?")):
+                        text += "."
+                    text += f" {closer}"
+                break
+
+        # Clean up any double periods or spaces
+        text = text.replace("..", ".").replace("  ", " ").strip()
 
         return text
 
