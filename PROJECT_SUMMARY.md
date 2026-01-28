@@ -17,7 +17,15 @@ capture-kit/
 │   │   ├── post_tracker.py   # Post performance tracking
 │   │   ├── trending_scanner.py # Trending content detection
 │   │   ├── feedback_loop.py  # Weekly analysis & insights
-│   │   └── voice_evolver.py  # Iterative voice improvement
+│   │   ├── voice_evolver.py  # Iterative voice improvement
+│   │   ├── follow_targeting.py # Follow/unfollow management
+│   │   │
+│   │   └── platforms/        # Platform adapters
+│   │       ├── __init__.py   # Registry & factory
+│   │       ├── base.py       # Abstract base class
+│   │       ├── twitter.py    # Twitter rules & scoring
+│   │       ├── linkedin.py   # LinkedIn rules & scoring
+│   │       └── instagram.py  # Instagram rules & scoring
 │   │
 │   ├── benchmarks/           # Benchmark system
 │   │   ├── benchmark_manager.py
@@ -32,13 +40,19 @@ capture-kit/
 │   │   └── twitter_public_scraper.py  # No-auth Twitter scraper
 │   │
 │   ├── profiles/             # User voice profiles
-│   ├── data/                 # Runtime data (post history, etc.)
+│   ├── data/                 # Runtime data
+│   │   ├── targets.json      # Follow targeting data
+│   │   └── {user}/           # Per-user data
 │   ├── queue/                # Content queue pipeline
 │   │   ├── pending/
 │   │   ├── approved/
 │   │   └── posted/
 │   ├── niches/               # Niche configuration templates
+│   │   ├── fintwit.json
+│   │   ├── crypto.json
+│   │   └── tech.json
 │   │
+│   ├── automation_cli.py     # Main unified CLI (14 command groups)
 │   ├── benchmark_cli.py      # Benchmark CLI
 │   ├── fintwit_cli.py        # FinTwit engagement CLI
 │   └── run_tests.py          # Test runner
@@ -103,17 +117,74 @@ generator = ReplyGenerator(profile_path="profiles/justin_katz.json")
 reply = generator.generate_reply(post)  # Auto-targets 26 words
 ```
 
-### 4. Complete Automation System
+### 4. Platform Adapter Framework
+**Folder:** `automation/platforms/`
+
+Multi-platform support with platform-specific rules, scoring, and optimization.
+
+```python
+from automation.platforms import get_adapter, list_platforms
+
+# List available platforms
+platforms = list_platforms()  # ['twitter', 'linkedin', 'instagram']
+
+# Get platform-specific adapter
+adapter = get_adapter("linkedin")
+
+# Score content for platform fit
+result = adapter.score_platform_fit(content, "post")
+# Returns: {"score": 85, "issues": ["First line too long"]}
+
+# Get rules for LLM prompts
+rules = adapter.get_system_prompt_rules()
+```
+
+**Platform Configurations:**
+
+| Platform | Post Length | Reply Length | Best Times | Key Rules |
+|----------|-------------|--------------|------------|-----------|
+| Twitter | 200-280 chars | 70-100 chars | 8-9am, 12-1pm, 5-6pm EST | No links in replies, hook in first 5 words |
+| LinkedIn | 1200-1500 chars | 100-300 chars | Tue-Thu 8-10am, 12pm | No links in body, line breaks, end with CTA |
+| Instagram | 150-200 chars | 20-50 chars | 11am-1pm, 7-9pm | 5-10 hashtags at end, carousels preferred |
+
+### 5. Follow Targeting System
+**File:** `automation/follow_targeting.py`
+
+Strategic follow/unfollow management with tracking.
+
+```python
+from automation.follow_targeting import FollowTargetingManager
+
+manager = FollowTargetingManager()
+
+# Add targets
+manager.add_target("@spotgamma", reason="Great options analysis")
+
+# Track follows
+manager.track_follow("@spotgamma", source="@unusual_whales")
+
+# Record followback status
+manager.record_followback("@spotgamma", followed_back=True)
+
+# Get unfollow candidates (no followback after 7 days)
+candidates = manager.get_unfollow_candidates(days=7)
+
+# Get stats
+stats = manager.get_stats()
+# Returns: total, pending, followed, followback_rate, etc.
+```
+
+### 6. Complete Automation System
 **Folder:** `automation/`
 
 Full-featured social media automation with these components:
 
-#### 4.1 Data Schemas (`schemas.py`)
+#### 6.1 Data Schemas (`schemas.py`)
 - **Enums:** Platform, Goal, HookType, Framework, Trigger, QueueStatus, ExperimentStatus
 - **Dataclasses:** PostRecord, QueueItem, Experiment, WeeklySummary, ContentAnalysis
 - **Configs:** PLATFORM_CONFIGS, GOAL_CONFIGS
 
-#### 4.2 User Manager (`user_manager.py`)
+#### 6.2 User Manager (`user_manager.py`)
 Multi-user profile management with voice settings.
 
 ```python
@@ -130,16 +201,7 @@ manager.switch_user("Justin Katz")
 profile = manager.get_active_profile()
 ```
 
-**Profile Structure:**
-- Platform handles (Twitter, LinkedIn, Instagram)
-- Voice settings (tone, formality, vocabulary, emoji style)
-- Style settings (sentence length, punctuation, capitalization)
-- Platform-specific preferences
-- Proven patterns
-- Baseline metrics
-- Milestones
-
-#### 4.3 Content Analyzer (`content_analyzer.py`)
+#### 6.3 Content Analyzer (`content_analyzer.py`)
 Deep analysis of social media content.
 
 ```python
@@ -158,166 +220,147 @@ analysis = analyzer.analyze(content, platform="twitter")
 # - Strengths and weaknesses
 ```
 
-#### 4.4 LLM Generator (`llm_generator.py`)
-Claude API integration for content generation.
+#### 6.4 LLM Generator (`llm_generator.py`)
+Claude API integration for content generation with platform-aware prompts.
 
 ```python
 from automation import LLMGenerator
 
 generator = LLMGenerator(api_key="...")
 replies = generator.generate_replies(
-    post_content="Market update...",
-    post_author="spotgamma",
-    count=3
+    original_post={"content": "...", "author": "spotgamma"},
+    platform="linkedin",  # Uses platform-specific rules
+    num_replies=3
 )
 ```
 
 **Features:**
 - Builds system prompt from user voice profile
 - Incorporates benchmark patterns
+- Includes platform-specific rules from adapters
 - Falls back to template-based generation if API unavailable
-- Supports: replies, posts, content adaptation
 
-#### 4.5 Queue Manager (`queue_manager.py`)
+#### 6.5 Queue Manager (`queue_manager.py`)
 Content pipeline management: pending -> approved -> posted.
 
-```python
-from automation import QueueManager
+#### 6.6 Post Tracker (`post_tracker.py`)
+Track post performance over time with engagement snapshots.
 
-queue = QueueManager()
-item = queue.add_to_queue(
-    content="My reply...",
-    platform="twitter",
-    reply_to_url="https://twitter.com/...",
-    analysis=analysis_dict,
-    scores={"voice_match": 0.85, "engagement_prediction": 0.72}
-)
-queue.approve(item.id)
-queue.mark_posted(item.id, post_url="https://twitter.com/...")
-```
-
-#### 4.6 Post Tracker (`post_tracker.py`)
-Track post performance over time.
-
-```python
-from automation import PostTracker
-
-tracker = PostTracker()
-record = tracker.log_post(
-    content="My post...",
-    url="https://twitter.com/...",
-    platform="twitter"
-)
-tracker.update_engagement(record.id, {"likes": 50, "retweets": 10}, "24h")
-
-# Analysis
-top_posts = tracker.get_top_performing(limit=10)
-by_technique = tracker.get_performance_by_technique()
-by_hook = tracker.get_performance_by_hook()
-baseline = tracker.calculate_baseline()
-```
-
-#### 4.7 Trending Scanner (`trending_scanner.py`)
+#### 6.7 Trending Scanner (`trending_scanner.py`)
 Find trending content and reply opportunities.
 
-```python
-from automation import TrendingScanner
-
-scanner = TrendingScanner()
-watchlist = scanner.get_watchlist()  # From profile + niche config
-keywords = scanner.get_keywords()
-
-# Add posts from external scrape
-scanner.add_posts_from_scrape(posts_data, platform="twitter")
-
-# Get opportunities
-opportunities = scanner.get_opportunities(min_score=50, limit=10)
-scanner.mark_replied(post_id, reply_url="...")
-```
-
-#### 4.8 Feedback Loop (`feedback_loop.py`)
+#### 6.8 Feedback Loop (`feedback_loop.py`)
 Weekly analysis and performance tracking.
 
-```python
-from automation import FeedbackLoop
+#### 6.9 Voice Evolver (`voice_evolver.py`)
+Iterative voice profile improvement based on performance data.
 
-loop = FeedbackLoop()
-summary = loop.generate_weekly_report()
+## Main CLI Commands (`automation_cli.py`)
 
-# Returns WeeklySummary with:
-# - Posts count, total engagement, avg engagement rate
-# - Top performing posts, successful techniques, best hooks
-# - Worst performing posts, failed techniques
-# - Comparison to benchmark
-# - Gaps identified
-# - Recommendations
-
-trends = loop.get_trend_analysis(weeks=4)
-insights = loop.get_technique_insights()
+### User Management
+```bash
+python automation_cli.py user create "Name" --twitter @handle --niche fintwit
+python automation_cli.py user switch "Name"
+python automation_cli.py user list
+python automation_cli.py user profile
 ```
 
-#### 4.9 Voice Evolver (`voice_evolver.py`)
-Iterative voice profile improvement.
-
-```python
-from automation import VoiceEvolver
-
-evolver = VoiceEvolver()
-patterns = evolver.analyze_voice_patterns()  # From top posts
-suggestions = evolver.suggest_voice_updates()
-
-# Apply selected suggestions
-result = evolver.apply_evolution(suggestions_to_apply=[0, 1, 2])
-
-# Track versions
-history = evolver.get_evolution_history()
-evolver.compare_versions(version1=1, version2=2)
+### Content Analysis
+```bash
+python automation_cli.py analyze --content "Your content" --platform twitter
+python automation_cli.py analyze --content "Your content" --platform linkedin
 ```
 
-## Platform-Specific Optimization
+### Content Drafting
+```bash
+python automation_cli.py draft --content "Post to reply to" --platform twitter
+python automation_cli.py draft --content "Post to reply to" --platform linkedin --count 5
+```
+
+### Platform Information
+```bash
+python automation_cli.py platforms list
+python automation_cli.py platforms show twitter
+python automation_cli.py platforms show linkedin
+```
+
+### Scanning & Opportunities
+```bash
+python automation_cli.py scan --limit 10
+python automation_cli.py opportunities --min-score 50
+python automation_cli.py add-post --author @handle --content "..." --likes 500
+```
+
+### Queue Management
+```bash
+python automation_cli.py queue list --status pending
+python automation_cli.py queue add --content "..." --platform twitter
+python automation_cli.py queue approve <item_id>
+python automation_cli.py queue post <item_id> --url "https://..."
+```
+
+### Post Tracking
+```bash
+python automation_cli.py log --content "..." --url "https://..." --platform twitter
+python automation_cli.py history --limit 20
+```
+
+### Analytics & Reporting
+```bash
+python automation_cli.py report --week 0
+python automation_cli.py trends --weeks 4
+python automation_cli.py evolve
+python automation_cli.py evolve --apply
+```
+
+### Follow Targeting
+```bash
+python automation_cli.py targets add @handle --reason "why"
+python automation_cli.py targets remove @handle
+python automation_cli.py targets list --status pending
+python automation_cli.py targets track @handle --source @account
+python automation_cli.py targets followback @handle --yes
+python automation_cli.py targets followback @handle --no
+python automation_cli.py targets check --days 7
+python automation_cli.py targets unfollow @handle --reason "why"
+python automation_cli.py targets suggest
+python automation_cli.py targets analyze @handle
+python automation_cli.py targets stats
+python automation_cli.py targets followed --pending
+python automation_cli.py targets settings --days 7
+```
+
+## Platform-Specific Rules
 
 ### Twitter
-- Reply length: 70-100 chars
-- Post length: 200-280 chars
-- Reply speed: < 30 minutes
-- Hooks first
-- Quote tweets preferred
-- Strategy: Fast, short, insight not praise
+| Rule | Description |
+|------|-------------|
+| No links in replies | Kills algorithm visibility |
+| Hook in first 5 words | Attention spans are short |
+| One idea per tweet | Clarity wins |
+| Quote tweet > retweet | Better for reach |
+| Reply within 30 min | Speed matters for viral posts |
+| Max 1-2 hashtags | Or none at all |
 
 ### LinkedIn
-- Post length: 1200-1500 chars
-- Use line breaks
-- First line critical
-- Personal stories win
-- Avoid external links
-- Strategy: Depth > speed, 3-5 sentences, ask questions
+| Rule | Description |
+|------|-------------|
+| No links in post body | Kills reach by 50%+ |
+| Links go in first comment | Algorithm hack |
+| Line breaks every 1-2 sentences | Readability |
+| First line is everything | Shows before "see more" |
+| End with question/CTA | Drives engagement |
+| Hashtags at very end | Max 3-5 |
+| Best days: Tue-Thu | Avoid weekends |
 
 ### Instagram
-- Caption length: 150-2200 chars
-- Carousels preferred
-- First slide hook
-- Hashtags at end (5-15)
-- Strategy: Very short, genuine, relationship-focused
-
-## Goal-Based Optimization
-
-### Grow Followers
-- Optimize for: shares
-- Metrics: retweets, shares, follower growth
-- Content focus: Shareable insights, contrarian takes, data visualizations
-- Priority: retweets > quotes > replies
-
-### Drive Traffic
-- Optimize for: clicks
-- Metrics: link clicks, profile visits, website traffic
-- Content focus: Curiosity gaps, clear CTAs, value teasers
-- Priority: clicks > saves > shares
-
-### Build Authority
-- Optimize for: thoughtful engagement
-- Metrics: quality replies, mentions, quote tweets
-- Content focus: Deep analysis, original research, unique perspectives
-- Priority: quality replies > saves > quotes
+| Rule | Description |
+|------|-------------|
+| First line = scroll stopper | Shows before "more" |
+| Carousels > single images | 3x more reach |
+| 5-10 hashtags at end | Discovery |
+| Reply to comments in 1 hour | Algorithm boost |
+| Reels for discovery | Posts for community |
 
 ## Hook Types Detected
 
@@ -355,30 +398,12 @@ From `benchmarks/finance_twitter.json`:
 - **Tone:** Measured
 - **Emoji style:** Minimal
 
-## CLI Commands Available
-
-### Benchmark CLI (`benchmark_cli.py`)
-```bash
-python benchmark_cli.py analyze @account   # Analyze account
-python benchmark_cli.py compare profile.json  # Compare to benchmark
-python benchmark_cli.py show               # Show benchmark data
-python benchmark_cli.py add-viral          # Add viral post
-```
-
-### FinTwit CLI (`fintwit_cli.py`)
-```bash
-python fintwit_cli.py scan              # Find trending posts
-python fintwit_cli.py opportunities     # Show reply opportunities
-python fintwit_cli.py draft @author     # Draft replies
-python fintwit_cli.py brief             # Today's engagement brief
-python fintwit_cli.py analyze           # Analyze content
-```
-
 ## Data Files
 
 | File | Purpose |
 |------|---------|
 | `data/active_user.json` | Current active user |
+| `data/targets.json` | Follow targeting data |
 | `data/{user}/post_history.json` | User's post history |
 | `data/{user}/experiments.json` | A/B test experiments |
 | `data/{user}/trending_cache.json` | Cached trending posts |
@@ -394,16 +419,17 @@ python fintwit_cli.py analyze           # Analyze content
 1. **Benchmark-driven optimization** - All content generation targets metrics from actual top performers
 2. **Voice matching** - Replies and posts match user's established voice profile
 3. **Iterative improvement** - Feedback loop identifies what works, voice evolver applies learnings
-4. **Multi-platform awareness** - Each platform has specific optimization rules
+4. **Multi-platform awareness** - Each platform has specific optimization rules via adapters
 5. **Goal alignment** - Content strategy adapts based on user goals
+6. **Follow strategy** - Track followbacks, identify unfollow candidates systematically
 
-## Next Steps (Planned)
+## Architecture Highlights
 
-1. Create niche templates (fintwit.json, crypto.json, tech.json)
-2. Build main CLI with unified commands
-3. Add scheduling system
-4. Implement A/B testing workflow
-5. Add image/media analysis
+- **14 CLI command groups** in unified `automation_cli.py`
+- **3 platform adapters** with extensible base class
+- **Fallback generation** when Claude API unavailable
+- **Per-user data isolation** in `data/{user}/` folders
+- **JSON-based persistence** for portability
 
 ---
 
