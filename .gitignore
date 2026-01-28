@@ -2,3 +2,9 @@ __pycache__/
 *.pyc
 *.zip
 .claude/
+
+# Runtime data (user-specific)
+capture-kit-starter/data/
+capture-kit-starter/queue/
+capture-kit-starter/profiles/*.json
+!capture-kit-starter/profiles/.gitkeep
