@@ -22,7 +22,7 @@ An AI profile extraction system that learns about a user's communication style, 
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/capture-kit.git
+git clone https://github.com/justinkatz94-glitch/capture-kit.git
 cd capture-kit/capture-kit-starter
 
 # Run tests (no external dependencies needed for core functionality)
