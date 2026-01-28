@@ -93,22 +93,36 @@ class SocialScraper:
     # =========================================================================
     # TWITTER/X SCRAPER
     # =========================================================================
-    
-    async def scrape_twitter(self, username: str, max_posts: int = 100) -> Dict[str, Any]:
+
+    # List of Nitter instances to try (public Twitter frontends, no login required)
+    NITTER_INSTANCES = [
+        "https://nitter.net",
+        "https://nitter.poast.org",
+        "https://nitter.cz",
+        "https://nitter.privacydev.net",
+        "https://nitter.1d4.us",
+    ]
+
+    async def scrape_twitter(self, username: str, max_posts: int = 100, use_nitter: bool = True) -> Dict[str, Any]:
         """
         Scrape Twitter/X profile.
-        
+
         Args:
             username: Twitter username (with or without @)
             max_posts: Maximum number of posts to collect
+            use_nitter: If True, use Nitter (no login required). If False, use Twitter directly.
         """
         username = username.lstrip('@')
+
+        if use_nitter:
+            return await self._scrape_twitter_via_nitter(username, max_posts)
+
         profile_url = f"https://x.com/{username}"
-        
+
         # Navigate to profile
         await self.page.goto(profile_url)
         await self.page.wait_for_timeout(2000)
-        
+
         # Check if logged in by looking for compose button
         is_logged_in = await self.page.query_selector('[data-testid="SideNav_NewTweet_Button"]')
         if not is_logged_in:
@@ -120,13 +134,13 @@ class SocialScraper:
                 return {"error": "Login required"}
             await self.page.goto(profile_url)
             await self.page.wait_for_timeout(2000)
-        
+
         # Extract profile info
         profile = await self._extract_twitter_profile()
-        
+
         # Scroll and collect tweets
         tweets = await self._collect_twitter_tweets(max_posts)
-        
+
         return {
             "platform": "twitter",
             "username": username,
@@ -135,6 +149,202 @@ class SocialScraper:
             "total_posts": len(tweets),
             "scraped_at": datetime.now().isoformat()
         }
+
+    async def _scrape_twitter_via_nitter(self, username: str, max_posts: int) -> Dict[str, Any]:
+        """
+        Scrape Twitter profile via Nitter or public API (no login required).
+        """
+        # First, try the syndication API (most reliable, no browser needed)
+        print("Trying Twitter syndication API...")
+        try:
+            from .twitter_public_scraper import fetch_twitter_profile
+            result = fetch_twitter_profile(username, max_posts)
+            if "error" not in result:
+                print(f"Successfully fetched {result.get('total_posts', 0)} tweets via syndication API")
+                return result
+            print(f"Syndication API failed: {result.get('error')}")
+        except Exception as e:
+            print(f"Syndication API error: {e}")
+
+        # Fallback to Nitter instances
+        working_instance = None
+        for instance in self.NITTER_INSTANCES:
+            try:
+                profile_url = f"{instance}/{username}"
+                print(f"Trying Nitter instance: {instance}")
+                response = await self.page.goto(profile_url, timeout=15000)
+                await self.page.wait_for_timeout(2000)
+
+                # Check if page loaded successfully
+                if response and response.status == 200:
+                    # Check for error messages
+                    error_el = await self.page.query_selector('.error-panel, .error-page')
+                    if not error_el:
+                        working_instance = instance
+                        print(f"Using Nitter instance: {instance}")
+                        break
+            except Exception as e:
+                print(f"Instance {instance} failed: {e}")
+                continue
+
+        if not working_instance:
+            return {"error": "All methods failed. Try again later or use official Twitter data export."}
+
+        # Check for user not found
+        not_found = await self.page.query_selector('.error-panel')
+        if not_found:
+            error_text = await not_found.inner_text()
+            print(f"Error from Nitter: {error_text}")
+            return {"error": f"User not found or Nitter error: {error_text}"}
+
+        # Extract profile info from Nitter
+        profile = await self._extract_nitter_profile()
+        print(f"Profile extracted: {profile}")
+
+        # Collect tweets from Nitter
+        tweets = await self._collect_nitter_tweets(max_posts)
+        print(f"Tweets collected: {len(tweets)}")
+
+        return {
+            "platform": "twitter",
+            "username": username,
+            "profile": profile,
+            "posts": tweets,
+            "total_posts": len(tweets),
+            "scraped_at": datetime.now().isoformat(),
+            "source": "nitter"
+        }
+
+    async def _extract_nitter_profile(self) -> Dict[str, str]:
+        """Extract profile information from Nitter page."""
+        profile = {}
+
+        try:
+            # Name
+            name_el = await self.page.query_selector('.profile-card-fullname')
+            if name_el:
+                profile["name"] = await name_el.inner_text()
+
+            # Username
+            username_el = await self.page.query_selector('.profile-card-username')
+            if username_el:
+                profile["username"] = await username_el.inner_text()
+
+            # Bio
+            bio_el = await self.page.query_selector('.profile-bio')
+            if bio_el:
+                profile["bio"] = await bio_el.inner_text()
+
+            # Location
+            loc_el = await self.page.query_selector('.profile-location')
+            if loc_el:
+                profile["location"] = await loc_el.inner_text()
+
+            # Stats
+            stats = await self.page.query_selector_all('.profile-stat-num')
+            stat_labels = await self.page.query_selector_all('.profile-stat-header')
+            for i, (stat, label) in enumerate(zip(stats, stat_labels)):
+                label_text = (await label.inner_text()).lower().strip()
+                stat_text = await stat.inner_text()
+                if 'tweet' in label_text:
+                    profile["tweets"] = stat_text
+                elif 'following' in label_text:
+                    profile["following"] = stat_text
+                elif 'follower' in label_text:
+                    profile["followers"] = stat_text
+                elif 'like' in label_text:
+                    profile["likes"] = stat_text
+
+        except Exception as e:
+            profile["_error"] = str(e)
+
+        return profile
+
+    async def _collect_nitter_tweets(self, max_posts: int) -> List[Dict]:
+        """Scroll and collect tweets from Nitter."""
+        tweets = []
+        seen_content = set()
+        scroll_attempts = 0
+        max_scroll_attempts = 20
+
+        while len(tweets) < max_posts and scroll_attempts < max_scroll_attempts:
+            # Get all timeline items
+            tweet_elements = await self.page.query_selector_all('.timeline-item')
+
+            for tweet_el in tweet_elements:
+                try:
+                    # Skip retweets if they have a retweet indicator
+                    retweet_el = await tweet_el.query_selector('.retweet-header')
+                    is_retweet = retweet_el is not None
+
+                    # Extract tweet content
+                    content_el = await tweet_el.query_selector('.tweet-content')
+                    content = await content_el.inner_text() if content_el else ""
+
+                    # Skip if already seen
+                    if content in seen_content or not content.strip():
+                        continue
+                    seen_content.add(content)
+
+                    # Extract timestamp
+                    time_el = await tweet_el.query_selector('.tweet-date a')
+                    timestamp_text = await time_el.get_attribute('title') if time_el else None
+                    tweet_link = await time_el.get_attribute('href') if time_el else None
+
+                    # Extract stats
+                    stats = {}
+                    stat_container = await tweet_el.query_selector('.tweet-stats')
+                    if stat_container:
+                        stat_spans = await stat_container.query_selector_all('.tweet-stat')
+                        for stat_span in stat_spans:
+                            icon = await stat_span.query_selector('.icon-container')
+                            if icon:
+                                icon_class = await icon.get_attribute('class') or ""
+                                value_el = await stat_span.query_selector('.tweet-stat-num')
+                                value = await value_el.inner_text() if value_el else "0"
+
+                                if 'comment' in icon_class or 'reply' in icon_class:
+                                    stats['replies'] = value
+                                elif 'retweet' in icon_class:
+                                    stats['retweets'] = value
+                                elif 'heart' in icon_class or 'like' in icon_class:
+                                    stats['likes'] = value
+                                elif 'quote' in icon_class:
+                                    stats['quotes'] = value
+
+                    tweets.append({
+                        "content": content,
+                        "timestamp": timestamp_text,
+                        "is_retweet": is_retweet,
+                        "replies": stats.get("replies", "0"),
+                        "retweets": stats.get("retweets", "0"),
+                        "likes": stats.get("likes", "0"),
+                        "quotes": stats.get("quotes", "0"),
+                    })
+
+                    if len(tweets) >= max_posts:
+                        break
+
+                except Exception:
+                    continue
+
+            # Try to load more by clicking "Load more" or scrolling
+            load_more = await self.page.query_selector('.show-more a')
+            if load_more and len(tweets) < max_posts:
+                try:
+                    await load_more.click()
+                    await self.page.wait_for_timeout(2000)
+                except:
+                    # Fall back to scrolling
+                    await self.page.evaluate("window.scrollBy(0, 1000)")
+                    await self.page.wait_for_timeout(1500)
+            else:
+                await self.page.evaluate("window.scrollBy(0, 1000)")
+                await self.page.wait_for_timeout(1500)
+
+            scroll_attempts += 1
+
+        return tweets
     
     async def _extract_twitter_profile(self) -> Dict[str, str]:
         """Extract Twitter profile information from current page."""
@@ -500,19 +710,21 @@ async def main():
     parser.add_argument("--max-posts", "-n", type=int, default=50, help="Max posts to collect")
     parser.add_argument("--output", "-o", help="Output JSON file")
     parser.add_argument("--headless", action="store_true", help="Run without visible browser")
-    
+    parser.add_argument("--no-nitter", action="store_true", help="Use Twitter directly instead of Nitter (requires login)")
+
     args = parser.parse_args()
-    
+
     scraper = SocialScraper(headless=args.headless)
-    
+
     try:
         await scraper.start()
-        
+
         if args.platform == "twitter":
             if not args.username:
                 print("Error: --username required for Twitter")
                 return
-            result = await scraper.scrape_twitter(args.username, args.max_posts)
+            use_nitter = not args.no_nitter
+            result = await scraper.scrape_twitter(args.username, args.max_posts, use_nitter=use_nitter)
         
         elif args.platform == "linkedin":
             result = await scraper.scrape_linkedin(max_posts=args.max_posts)

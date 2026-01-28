@@ -145,7 +145,8 @@ class SocialCollector:
         platform: str,
         username: str = None,
         max_posts: int = 50,
-        headless: bool = False
+        headless: bool = False,
+        use_nitter: bool = True
     ) -> Dict[str, Any]:
         """
         Scrape data directly from a platform using logged-in browser.
@@ -155,6 +156,7 @@ class SocialCollector:
             username: Username to scrape (your own)
             max_posts: Maximum posts to collect
             headless: If False, shows browser window for transparency
+            use_nitter: If True, use Nitter for Twitter (no login required)
 
         Returns:
             Scraped data summary
@@ -179,7 +181,7 @@ class SocialCollector:
             if platform == "twitter":
                 if not username:
                     return {"error": "Username required for Twitter scraping"}
-                data = await self.scraper.scrape_twitter(username, max_posts)
+                data = await self.scraper.scrape_twitter(username, max_posts, use_nitter=use_nitter)
 
             elif platform == "linkedin":
                 data = await self.scraper.scrape_linkedin(max_posts=max_posts)
@@ -385,6 +387,7 @@ def main():
     scrape_parser.add_argument("--max-posts", "-n", type=int, default=50)
     scrape_parser.add_argument("--output", "-o", help="Output JSON file")
     scrape_parser.add_argument("--headless", action="store_true")
+    scrape_parser.add_argument("--no-nitter", action="store_true", help="Use Twitter directly instead of Nitter (requires login)")
 
     args = parser.parse_args()
 
@@ -424,11 +427,13 @@ def main():
         async def run_scrape():
             collector = SocialCollector()
 
+            use_nitter = not getattr(args, 'no_nitter', False)
             result = await collector.scrape(
                 args.platform,
                 username=args.username,
                 max_posts=args.max_posts,
-                headless=args.headless
+                headless=args.headless,
+                use_nitter=use_nitter
             )
 
             print(result)
