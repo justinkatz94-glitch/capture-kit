@@ -1,0 +1,86 @@
+{
+  "name": "tech",
+  "description": "Tech Twitter - founders, engineers, product builders",
+  "platforms": ["twitter", "linkedin"],
+
+  "default_watchlist": [
+    "@paulg",
+    "@sama",
+    "@naval",
+    "@levelsio",
+    "@dhh",
+    "@paborenstein",
+    "@amasad",
+    "@raikidev"
+  ],
+
+  "keywords": [
+    "startup", "founder", "SaaS", "product",
+    "engineering", "developer", "code", "ship",
+    "AI", "ML", "GPT", "LLM",
+    "growth", "ARR", "MRR", "funding",
+    "launch", "ProductHunt", "YC", "indie"
+  ],
+
+  "hashtags": [
+    "#buildinpublic", "#indiehackers", "#startup",
+    "#SaaS", "#tech", "#AI", "#developers"
+  ],
+
+  "benchmark_name": "tech_twitter",
+
+  "successful_hooks": [
+    {
+      "type": "story",
+      "example": "I spent 2 years building this feature. Users asked for it once.",
+      "why": "Relatable founder struggles"
+    },
+    {
+      "type": "data",
+      "example": "We hit $10k MRR in 6 months. Here's what worked:",
+      "why": "Concrete metrics with promised insights"
+    },
+    {
+      "type": "contrarian",
+      "example": "The best marketing strategy? Stop marketing.",
+      "why": "Challenges conventional startup advice"
+    }
+  ],
+
+  "optimal_length": {
+    "twitter_reply": 25,
+    "twitter_post": 50,
+    "linkedin": 180
+  },
+
+  "best_posting_times": {
+    "twitter": [8, 9, 12, 13, 17, 18],
+    "linkedin": [7, 8, 12, 17, 18]
+  },
+
+  "tone": "authentic-helpful",
+  "vocabulary": "technical-accessible",
+
+  "twitter_tips": [
+    "Share real numbers and metrics",
+    "Document your journey publicly",
+    "Reply with actionable advice",
+    "Build in public genuinely",
+    "Help others without expecting return"
+  ],
+
+  "linkedin_tips": [
+    "Share lessons from building",
+    "Hiring and team insights perform well",
+    "Technical deep-dives with business context",
+    "Personal growth stories resonate"
+  ],
+
+  "avoid": [
+    "Humble bragging",
+    "Generic motivation quotes",
+    "Obvious self-promotion",
+    "Dunking on competitors",
+    "Fake vulnerability"
+  ]
+}

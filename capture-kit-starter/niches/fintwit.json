@@ -1,0 +1,87 @@
+{
+  "name": "fintwit",
+  "description": "Finance Twitter - traders, investors, market analysts",
+  "platforms": ["twitter", "linkedin"],
+
+  "default_watchlist": [
+    "@unusual_whales",
+    "@spotgamma",
+    "@OptionsAction",
+    "@SqueezeMetrics",
+    "@MacroAlf",
+    "@borrowed_ideas",
+    "@TradingAnalysi5",
+    "@Tasty_Software"
+  ],
+
+  "keywords": [
+    "options", "gamma", "dealer", "positioning", "flows",
+    "market structure", "vol", "volatility", "VIX",
+    "SPY", "SPX", "QQQ", "0DTE",
+    "earnings", "FOMC", "Fed", "rates",
+    "technical analysis", "support", "resistance",
+    "breakout", "trend", "momentum"
+  ],
+
+  "hashtags": [
+    "#fintwit", "#trading", "#options", "#stocks",
+    "#investing", "#markets", "#SPY", "#daytrading"
+  ],
+
+  "benchmark_name": "finance_twitter",
+
+  "successful_hooks": [
+    {
+      "type": "data",
+      "example": "$1.2B in 0DTE puts just hit the tape",
+      "why": "Concrete data grabs attention"
+    },
+    {
+      "type": "contrarian",
+      "example": "Everyone's bearish, but here's what they're missing",
+      "why": "Challenges consensus view"
+    },
+    {
+      "type": "question",
+      "example": "Why is gamma exposure at 52-week highs?",
+      "why": "Engages curious traders"
+    }
+  ],
+
+  "optimal_length": {
+    "twitter_reply": 26,
+    "twitter_post": 45,
+    "linkedin": 150
+  },
+
+  "best_posting_times": {
+    "twitter": [9, 10, 14, 15, 16, 19, 20],
+    "linkedin": [7, 8, 12, 17, 18]
+  },
+
+  "tone": "measured",
+  "vocabulary": "professional",
+
+  "twitter_tips": [
+    "Lead with data, not opinion",
+    "Reference specific tickers or metrics",
+    "Acknowledge uncertainty - 'could', 'may', 'watching'",
+    "Reply fast to breaking market news",
+    "Build relationships with larger accounts via quality replies"
+  ],
+
+  "linkedin_tips": [
+    "Focus on lessons learned, not just trades",
+    "Share frameworks, not just outcomes",
+    "Personal stories about trading journey resonate",
+    "Longer, more thoughtful content works better"
+  ],
+
+  "avoid": [
+    "Pumping specific stocks",
+    "Making price predictions without context",
+    "Excessive emoji usage",
+    "All-caps excitement",
+    "Attacking other traders"
+  ]
+}

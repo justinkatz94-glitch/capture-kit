@@ -1,0 +1,86 @@
+{
+  "name": "crypto",
+  "description": "Cryptocurrency and Web3 - traders, builders, analysts",
+  "platforms": ["twitter", "linkedin"],
+
+  "default_watchlist": [
+    "@CryptoHayes",
+    "@Cobie",
+    "@lookonchain",
+    "@WuBlockchain",
+    "@DefiIgnas",
+    "@tier10k",
+    "@CryptoCred",
+    "@MoonOverlord"
+  ],
+
+  "keywords": [
+    "bitcoin", "BTC", "ethereum", "ETH", "solana", "SOL",
+    "DeFi", "NFT", "web3", "airdrop",
+    "on-chain", "whale", "liquidity", "TVL",
+    "staking", "yield", "protocol", "L2",
+    "memecoin", "altcoin", "bull", "bear"
+  ],
+
+  "hashtags": [
+    "#crypto", "#bitcoin", "#ethereum", "#DeFi",
+    "#web3", "#NFT", "#altcoins", "#trading"
+  ],
+
+  "benchmark_name": "crypto_twitter",
+
+  "successful_hooks": [
+    {
+      "type": "data",
+      "example": "Whales just moved 10,000 BTC to exchanges",
+      "why": "On-chain data creates urgency"
+    },
+    {
+      "type": "callout",
+      "example": "Airdrop hunters, pay attention",
+      "why": "Direct address to target audience"
+    },
+    {
+      "type": "contrarian",
+      "example": "Everyone's calling for $100k, but look at this chart",
+      "why": "Challenges popular narrative"
+    }
+  ],
+
+  "optimal_length": {
+    "twitter_reply": 20,
+    "twitter_post": 40,
+    "linkedin": 120
+  },
+
+  "best_posting_times": {
+    "twitter": [8, 9, 14, 15, 20, 21, 22],
+    "linkedin": [9, 10, 17, 18]
+  },
+
+  "tone": "casual-confident",
+  "vocabulary": "crypto-native",
+
+  "twitter_tips": [
+    "Use crypto-native terminology",
+    "Reference on-chain data when possible",
+    "Move fast on breaking news",
+    "Thread format works well for analysis",
+    "Memes can amplify reach but use sparingly for authority"
+  ],
+
+  "linkedin_tips": [
+    "Focus on institutional perspective",
+    "Explain concepts for broader audience",
+    "Share builder/founder journey stories",
+    "Avoid excessive crypto slang"
+  ],
+
+  "avoid": [
+    "Shilling specific tokens",
+    "Making financial advice claims",
+    "Excessive moon/rocket emojis for authority accounts",
+    "Attacking other projects directly",
+    "Spreading unverified FUD"
+  ]
+}
