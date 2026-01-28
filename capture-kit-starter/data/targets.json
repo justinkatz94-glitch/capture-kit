@@ -1,0 +1,32 @@
+{
+  "targets": [
+    {
+      "handle": "spotgamma",
+      "added_at": "2026-01-28T14:57:52.343175",
+      "reason": "Great options flow analysis",
+      "source": "unusual_whales",
+      "followed_at": "2026-01-28T14:58:03.287069",
+      "followed_back": null,
+      "followback_checked_at": null,
+      "unfollowed_at": null,
+      "unfollow_reason": "",
+      "follower_count": 0,
+      "following_count": 0,
+      "engagement_rate": 0.0,
+      "niche_relevance": 0.0,
+      "tags": [],
+      "notes": ""
+    }
+  ],
+  "settings": {
+    "followback_check_days": 7,
+    "auto_unfollow_after_days": 14,
+    "max_daily_follows": 50,
+    "max_daily_unfollows": 30,
+    "min_follower_ratio": 0.5,
+    "prefer_engaged_accounts": true
+  },
+  "daily_stats": [],
+  "created_at": "",
+  "updated_at": "2026-01-28T14:58:03.287089"
+}

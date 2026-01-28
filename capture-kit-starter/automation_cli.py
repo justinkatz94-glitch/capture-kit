@@ -22,6 +22,7 @@ from automation.post_tracker import PostTracker
 from automation.trending_scanner import TrendingScanner
 from automation.feedback_loop import FeedbackLoop
 from automation.voice_evolver import VoiceEvolver
+from automation.follow_targeting import FollowTargetingManager
 
 
 def cmd_user_create(args):
@@ -116,11 +117,12 @@ def cmd_scan(args):
 
     # Show watchlist
     watchlist = scanner.get_watchlist()
+    limit = getattr(args, 'limit', 10)
     print("Watchlist accounts:")
-    for account in watchlist[:10]:
+    for account in watchlist[:limit]:
         print(f"  - {account}")
-    if len(watchlist) > 10:
-        print(f"  ... and {len(watchlist) - 10} more")
+    if len(watchlist) > limit:
+        print(f"  ... and {len(watchlist) - limit} more")
 
 
 def cmd_opportunities(args):
@@ -183,18 +185,24 @@ def cmd_draft(args):
     print(f"Content: {args.content[:100]}...")
     print()
 
+    original_post = {
+        "content": args.content,
+        "author": args.author,
+    }
+
     replies = generator.generate_replies(
-        post_content=args.content,
-        post_author=args.author,
-        count=args.count
+        original_post=original_post,
+        num_replies=args.count
     )
 
     for i, reply in enumerate(replies, 1):
-        analysis = analyzer.analyze(reply, "twitter")
-        word_count = len(reply.split())
+        # Reply is a GeneratedReply object
+        reply_content = reply.content if hasattr(reply, 'content') else str(reply)
+        analysis = analyzer.analyze(reply_content, "twitter")
+        word_count = len(reply_content.split())
 
         print(f"Reply {i}:")
-        print(f"  {reply}")
+        print(f"  {reply_content}")
         print(f"  [{word_count} words | Hook: {analysis.hook_type or 'none'} | Triggers: {', '.join(analysis.triggers[:2]) or 'none'}]")
         print()
 
@@ -433,6 +441,263 @@ def cmd_analyze(args):
             print(f"  - {w}")
 
 
+# =============================================================================
+# TARGETS COMMANDS
+# =============================================================================
+
+def cmd_targets_add(args):
+    """Add a follow target."""
+    manager = FollowTargetingManager()
+    result = manager.add_target(
+        handle=args.handle,
+        reason=args.reason or "",
+        source=args.source or "",
+    )
+
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+
+    print(f"Added target: @{result['handle']}")
+    if result.get('reason'):
+        print(f"  Reason: {result['reason']}")
+
+
+def cmd_targets_remove(args):
+    """Remove a follow target."""
+    manager = FollowTargetingManager()
+    result = manager.remove_target(args.handle)
+
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+
+    print(f"Removed: @{result['handle']}")
+
+
+def cmd_targets_list(args):
+    """List follow targets."""
+    manager = FollowTargetingManager()
+    targets = manager.list_targets(status=args.status)
+
+    if not targets:
+        print("No targets found.")
+        print("Add targets with: targets add @handle --reason 'why'")
+        return
+
+    status_label = f" ({args.status})" if args.status else ""
+    print(f"Follow Targets{status_label}: {len(targets)}\n")
+
+    for target in targets[:20]:
+        status = ""
+        if target.unfollowed_at:
+            status = " [unfollowed]"
+        elif target.followed_back is True:
+            status = " [followed back]"
+        elif target.followed_back is False:
+            status = " [no followback]"
+        elif target.followed_at:
+            days = target.days_since_follow
+            status = f" [followed {days}d ago]" if days else " [followed]"
+        else:
+            status = " [pending]"
+
+        print(f"  @{target.handle}{status}")
+        if target.reason:
+            print(f"      Reason: {target.reason}")
+        if target.source:
+            print(f"      Source: @{target.source}")
+
+    if len(targets) > 20:
+        print(f"\n  ... and {len(targets) - 20} more")
+
+
+def cmd_targets_track(args):
+    """Track a follow action."""
+    manager = FollowTargetingManager()
+    result = manager.track_follow(
+        handle=args.handle,
+        source=args.source or "",
+    )
+
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+
+    print(f"Tracked follow: @{result['handle']}")
+    print(f"  Status: {result['status']}")
+
+
+def cmd_targets_followback(args):
+    """Record followback status."""
+    manager = FollowTargetingManager()
+
+    if args.yes:
+        followed_back = True
+    elif args.no:
+        followed_back = False
+    else:
+        print("Error: Specify --yes or --no")
+        return
+
+    result = manager.record_followback(args.handle, followed_back)
+
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+
+    status = "followed back" if followed_back else "did NOT follow back"
+    print(f"@{result['handle']} {status}")
+
+
+def cmd_targets_check(args):
+    """Check for unfollow candidates."""
+    manager = FollowTargetingManager()
+    candidates = manager.get_unfollow_candidates(days=args.days)
+
+    if not candidates:
+        settings = manager.get_settings()
+        days = args.days or settings.get("followback_check_days", 7)
+        print(f"No unfollow candidates (checked after {days} days)")
+        return
+
+    print(f"Unfollow Candidates ({len(candidates)}):\n")
+    for target in candidates:
+        days = target.days_since_follow
+        status = "unknown" if target.followed_back is None else "no followback"
+        print(f"  @{target.handle} - followed {days} days ago ({status})")
+        if target.source:
+            print(f"      Source: @{target.source}")
+
+    print(f"\nUnfollow with: targets unfollow @handle --reason 'why'")
+
+
+def cmd_targets_unfollow(args):
+    """Record an unfollow action."""
+    manager = FollowTargetingManager()
+    result = manager.record_unfollow(
+        handle=args.handle,
+        reason=args.reason or "",
+    )
+
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+
+    print(f"Recorded unfollow: @{result['handle']}")
+    if result.get('reason'):
+        print(f"  Reason: {result['reason']}")
+
+
+def cmd_targets_suggest(args):
+    """Suggest new follow targets."""
+    manager = FollowTargetingManager()
+    suggestions = manager.suggest_targets(limit=args.limit or 10)
+
+    if not suggestions:
+        print("No suggestions available.")
+        print("Add accounts to your watchlist first.")
+        return
+
+    print(f"Suggested Follow Targets:\n")
+    for i, sug in enumerate(suggestions, 1):
+        print(f"{i}. {sug['handle']}")
+        print(f"   Reason: {sug['reason']}")
+        print(f"   Action: {sug['action']}")
+        print()
+
+
+def cmd_targets_analyze(args):
+    """Analyze a potential follow target."""
+    manager = FollowTargetingManager()
+    analysis = manager.analyze_target(args.handle)
+
+    print(f"Analysis for @{analysis['handle']}")
+    print(f"{'='*40}")
+    print(f"\nRecommendation: {analysis['analysis']['recommendation']}")
+
+    print(f"\nFactors to check:")
+    for factor in analysis['analysis']['factors_to_check']:
+        print(f"  - {factor}")
+
+    print(f"\nGood signs:")
+    for sign in analysis['scoring_guide']['good_signs']:
+        print(f"  + {sign}")
+
+    print(f"\nRed flags:")
+    for flag in analysis['scoring_guide']['red_flags']:
+        print(f"  - {flag}")
+
+
+def cmd_targets_stats(args):
+    """Show follow targeting statistics."""
+    manager = FollowTargetingManager()
+    stats = manager.get_stats()
+
+    print("Follow Targeting Stats")
+    print(f"{'='*40}")
+    print(f"Total targets: {stats['total_targets']}")
+    print(f"  Pending: {stats['pending']}")
+    print(f"  Currently followed: {stats['currently_followed']}")
+    print(f"  Unfollowed: {stats['unfollowed']}")
+    print()
+    print(f"Followback tracking:")
+    print(f"  Followed back: {stats['followbacks']}")
+    print(f"  No followback: {stats['no_followbacks']}")
+    print(f"  Unknown: {stats['unknown_status']}")
+    print(f"  Followback rate: {stats['followback_rate']}")
+    print()
+    print(f"Unfollow candidates: {stats['unfollow_candidates']}")
+
+
+def cmd_targets_followed(args):
+    """Show followed accounts needing status check."""
+    manager = FollowTargetingManager()
+
+    if args.pending:
+        targets = manager.get_followed_pending_check()
+        if not targets:
+            print("No accounts pending followback check.")
+            return
+
+        print(f"Accounts needing followback check ({len(targets)}):\n")
+        for target in targets:
+            days = target.days_since_follow
+            print(f"  @{target.handle} - followed {days} days ago")
+
+        print(f"\nRecord with: targets followback @handle --yes/--no")
+    else:
+        targets = manager.list_targets(status="followed")
+        if not targets:
+            print("No followed accounts.")
+            return
+
+        print(f"Currently followed ({len(targets)}):\n")
+        for target in targets[:20]:
+            days = target.days_since_follow
+            fb = ""
+            if target.followed_back is True:
+                fb = " [FB]"
+            elif target.followed_back is False:
+                fb = " [no FB]"
+            print(f"  @{target.handle} - {days} days{fb}")
+
+
+def cmd_targets_settings(args):
+    """View or update targeting settings."""
+    manager = FollowTargetingManager()
+
+    if args.days is not None:
+        result = manager.update_settings(followback_check_days=args.days)
+        print(f"Updated followback check to {args.days} days")
+    else:
+        settings = manager.get_settings()
+        print("Follow Targeting Settings")
+        print(f"{'='*40}")
+        for key, value in settings.items():
+            print(f"  {key}: {value}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Capture Kit - Social Media Automation CLI",
@@ -471,7 +736,8 @@ Examples:
     user_sub.add_parser("profile", help="Show active profile")
 
     # Scan
-    subparsers.add_parser("scan", help="Scan for trending posts")
+    scan_parser = subparsers.add_parser("scan", help="Scan for trending posts")
+    scan_parser.add_argument("--limit", type=int, default=10, help="Max accounts to show")
 
     # Opportunities
     opp_parser = subparsers.add_parser("opportunities", help="Show reply opportunities")
@@ -491,7 +757,7 @@ Examples:
 
     # Draft
     draft_parser = subparsers.add_parser("draft", help="Draft replies")
-    draft_parser.add_argument("--author", required=True, help="Original author")
+    draft_parser.add_argument("--author", default="unknown", help="Original author")
     draft_parser.add_argument("--content", required=True, help="Original content")
     draft_parser.add_argument("--count", type=int, default=3, help="Number of drafts")
 
@@ -544,6 +810,64 @@ Examples:
     analyze_parser = subparsers.add_parser("analyze", help="Analyze content")
     analyze_parser.add_argument("--content", required=True, help="Content to analyze")
     analyze_parser.add_argument("--platform", default="twitter", help="Platform")
+
+    # Targets commands
+    targets_parser = subparsers.add_parser("targets", help="Follow targeting management")
+    targets_sub = targets_parser.add_subparsers(dest="targets_command")
+
+    # targets add
+    tadd = targets_sub.add_parser("add", help="Add follow target")
+    tadd.add_argument("handle", help="Twitter handle")
+    tadd.add_argument("--reason", help="Why you want to follow them")
+    tadd.add_argument("--source", help="Account you found them from")
+
+    # targets remove
+    tremove = targets_sub.add_parser("remove", help="Remove target")
+    tremove.add_argument("handle", help="Twitter handle")
+
+    # targets list
+    tlist = targets_sub.add_parser("list", help="List targets")
+    tlist.add_argument("--status", choices=["pending", "followed", "unfollowed", "followback", "no_followback"],
+                       help="Filter by status")
+
+    # targets track
+    ttrack = targets_sub.add_parser("track", help="Track a follow action")
+    ttrack.add_argument("handle", help="Handle that was followed")
+    ttrack.add_argument("--source", help="Where you found them")
+
+    # targets followback
+    tfb = targets_sub.add_parser("followback", help="Record followback status")
+    tfb.add_argument("handle", help="Twitter handle")
+    tfb.add_argument("--yes", action="store_true", help="They followed back")
+    tfb.add_argument("--no", action="store_true", help="They did not follow back")
+
+    # targets check
+    tcheck = targets_sub.add_parser("check", help="Show unfollow candidates")
+    tcheck.add_argument("--days", type=int, help="Days to wait before suggesting unfollow")
+
+    # targets unfollow
+    tunfollow = targets_sub.add_parser("unfollow", help="Record an unfollow")
+    tunfollow.add_argument("handle", help="Handle that was unfollowed")
+    tunfollow.add_argument("--reason", help="Reason for unfollowing")
+
+    # targets suggest
+    tsuggest = targets_sub.add_parser("suggest", help="Suggest new targets")
+    tsuggest.add_argument("--limit", type=int, default=10, help="Max suggestions")
+
+    # targets analyze
+    tanalyze = targets_sub.add_parser("analyze", help="Analyze a potential target")
+    tanalyze.add_argument("handle", help="Handle to analyze")
+
+    # targets stats
+    targets_sub.add_parser("stats", help="Show targeting statistics")
+
+    # targets followed
+    tfollowed = targets_sub.add_parser("followed", help="Show followed accounts")
+    tfollowed.add_argument("--pending", action="store_true", help="Show accounts needing followback check")
+
+    # targets settings
+    tsettings = targets_sub.add_parser("settings", help="View/update settings")
+    tsettings.add_argument("--days", type=int, help="Set followback check days")
 
     args = parser.parse_args()
 
@@ -605,6 +929,34 @@ Examples:
 
     elif args.command == "analyze":
         cmd_analyze(args)
+
+    elif args.command == "targets":
+        if args.targets_command == "add":
+            cmd_targets_add(args)
+        elif args.targets_command == "remove":
+            cmd_targets_remove(args)
+        elif args.targets_command == "list":
+            cmd_targets_list(args)
+        elif args.targets_command == "track":
+            cmd_targets_track(args)
+        elif args.targets_command == "followback":
+            cmd_targets_followback(args)
+        elif args.targets_command == "check":
+            cmd_targets_check(args)
+        elif args.targets_command == "unfollow":
+            cmd_targets_unfollow(args)
+        elif args.targets_command == "suggest":
+            cmd_targets_suggest(args)
+        elif args.targets_command == "analyze":
+            cmd_targets_analyze(args)
+        elif args.targets_command == "stats":
+            cmd_targets_stats(args)
+        elif args.targets_command == "followed":
+            cmd_targets_followed(args)
+        elif args.targets_command == "settings":
+            cmd_targets_settings(args)
+        else:
+            targets_parser.print_help()
 
 
 if __name__ == "__main__":
