@@ -25,6 +25,7 @@ from automation.voice_evolver import VoiceEvolver
 from automation.follow_targeting import FollowTargetingManager
 from automation.platforms import get_adapter, list_platforms
 from automation.linkedin_benchmark import LinkedInBenchmarkManager, BenchmarkPost
+from automation.linkedin_scraper import LinkedInVoiceBuilder, get_content_type_best_practices
 
 
 def cmd_user_create(args):
@@ -857,7 +858,8 @@ def cmd_benchmark_list(args):
 
     if not accounts:
         print("No benchmark accounts.")
-        print("Add accounts with: benchmark add @handle")
+        print("Add accounts with: benchmark add <linkedin-url>")
+        print("Example: benchmark add https://linkedin.com/in/peraborstrom")
         return
 
     print(f"LinkedIn Benchmark Accounts ({len(accounts)}):\n")
@@ -866,6 +868,7 @@ def cmd_benchmark_list(args):
         print(f"  @{acct['handle']}")
         if acct.get('name') and acct['name'] != acct['handle']:
             print(f"      Name: {acct['name']}")
+        print(f"      URL: {acct.get('profile_url', 'N/A')}")
         print(f"      Posts analyzed: {posts}")
         if acct.get('last_scanned'):
             print(f"      Last scanned: {acct['last_scanned'][:10]}")
@@ -1008,6 +1011,156 @@ def cmd_benchmark_context(args):
         for i, ex in enumerate(context['examples'][:2], 1):
             print(f"\n  {i}. @{ex['author']} ({ex['engagement']} likes)")
             print(f"     {ex['content'][:150]}...")
+
+
+# =============================================================================
+# VOICE COMMANDS - Import user's own content to build voice profile
+# =============================================================================
+
+def cmd_voice_import_post(args):
+    """Import a user's own post to build voice profile."""
+    user = get_active_user()
+    if not user:
+        print("No active user.")
+        return
+
+    builder = LinkedInVoiceBuilder(user)
+    result = builder.add_post(
+        content=args.content,
+        url=args.url or "",
+        likes=args.likes or 0,
+        comments=args.comments or 0,
+        shares=args.shares or 0,
+    )
+
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+
+    print(f"Imported post for {user}")
+    print(f"  Word count: {result['word_count']}")
+    print(f"  Hook type: {result['hook_type']}")
+    print(f"  Total posts: {result['total_posts']}")
+
+
+def cmd_voice_import_article(args):
+    """Import a user's own article."""
+    user = get_active_user()
+    if not user:
+        print("No active user.")
+        return
+
+    builder = LinkedInVoiceBuilder(user)
+    result = builder.add_article(
+        title=args.title,
+        content=args.content,
+        url=args.url or "",
+        likes=args.likes or 0,
+        comments=args.comments or 0,
+    )
+
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+
+    print(f"Imported article: {args.title}")
+    print(f"  Word count: {result['word_count']}")
+    print(f"  Total content: {result['total_content']}")
+
+
+def cmd_voice_analyze(args):
+    """Analyze voice profile from imported content."""
+    user = get_active_user()
+    if not user:
+        print("No active user.")
+        return
+
+    builder = LinkedInVoiceBuilder(user)
+    profile = builder.extract_voice_profile()
+
+    if "error" in profile:
+        print(f"Error: {profile['error']}")
+        return
+
+    print(f"Voice Profile for {user}")
+    print(f"{'='*50}")
+
+    content = profile['content_analyzed']
+    print(f"Content analyzed: {content['posts']} posts, {content['articles']} articles")
+    print()
+
+    voice = profile['voice_characteristics']
+    print("Voice Characteristics:")
+    print(f"  Avg word count: {voice['avg_word_count']}")
+    print(f"  Preferred hooks: {', '.join(list(voice['preferred_hooks'].keys())[:3])}")
+    print(f"  Uses line breaks: {'Yes' if voice['uses_line_breaks'] else 'No'}")
+    print(f"  Uses emoji: {'Yes' if voice['uses_emoji'] else 'No'}")
+    print(f"  Uses hashtags: {'Yes' if voice['uses_hashtags'] else 'No'}")
+    print()
+
+    if profile.get('signature_phrases'):
+        print("Signature phrases:")
+        for phrase in profile['signature_phrases'][:5]:
+            print(f"  - \"{phrase}\"")
+        print()
+
+    if profile.get('common_openers'):
+        print("Common openers:")
+        for opener in profile['common_openers'][:5]:
+            print(f"  - \"{opener}\"")
+
+
+def cmd_voice_stats(args):
+    """Show voice content stats."""
+    user = get_active_user()
+    if not user:
+        print("No active user.")
+        return
+
+    builder = LinkedInVoiceBuilder(user)
+    stats = builder.get_content_stats()
+
+    print(f"Voice Content for {user}")
+    print(f"{'='*50}")
+    print(f"Posts imported: {stats['posts']}")
+    print(f"Articles imported: {stats['articles']}")
+    print(f"Total content: {stats['total']}")
+    print(f"Total engagement: {stats['total_engagement']}")
+    print(f"Avg engagement: {stats['avg_engagement']:.0f}")
+
+
+def cmd_content_types(args):
+    """Show LinkedIn content type best practices."""
+    if args.type:
+        practices = get_content_type_best_practices(args.type)
+        if not practices:
+            print(f"Unknown content type: {args.type}")
+            print("Available: post, article, newsletter, comment")
+            return
+
+        print(f"{practices['name']} Best Practices")
+        print(f"{'='*50}")
+        print(f"Optimal length: {practices['optimal_length']['min']}-{practices['optimal_length']['max']} words")
+        print(f"Ideal: {practices['optimal_length']['ideal']} words")
+        print()
+        print("Best practices:")
+        for bp in practices['best_practices']:
+            print(f"  - {bp}")
+        print()
+        print(f"Effective hooks: {', '.join(practices['effective_hooks'])}")
+        if practices.get('posting_times'):
+            print(f"Best times: {', '.join(practices['posting_times'])}")
+        if practices.get('best_days'):
+            print(f"Best days: {', '.join(practices['best_days'])}")
+    else:
+        from automation.linkedin_scraper import LINKEDIN_CONTENT_TYPES
+        print("LinkedIn Content Types")
+        print(f"{'='*50}")
+        for ctype, info in LINKEDIN_CONTENT_TYPES.items():
+            length = info['optimal_length']
+            print(f"\n{info['name']} ({ctype})")
+            print(f"  Length: {length['min']}-{length['max']} words (ideal: {length['ideal']})")
+            print(f"  Hooks: {', '.join(info['effective_hooks'][:3])}")
 
 
 def main():
@@ -1227,6 +1380,37 @@ Examples:
     # benchmark context
     benchmark_sub.add_parser("context", help="Show LLM generation context")
 
+    # Voice commands (import user's own content)
+    voice_parser = subparsers.add_parser("voice", help="Voice profile management")
+    voice_sub = voice_parser.add_subparsers(dest="voice_command")
+
+    # voice import-post
+    vpost = voice_sub.add_parser("import-post", help="Import your own LinkedIn post")
+    vpost.add_argument("--content", "-c", required=True, help="Post content")
+    vpost.add_argument("--url", help="Post URL")
+    vpost.add_argument("--likes", type=int, default=0, help="Like count")
+    vpost.add_argument("--comments", type=int, default=0, help="Comment count")
+    vpost.add_argument("--shares", type=int, default=0, help="Share count")
+
+    # voice import-article
+    varticle = voice_sub.add_parser("import-article", help="Import your own LinkedIn article")
+    varticle.add_argument("--title", "-t", required=True, help="Article title")
+    varticle.add_argument("--content", "-c", required=True, help="Article content/excerpt")
+    varticle.add_argument("--url", help="Article URL")
+    varticle.add_argument("--likes", type=int, default=0, help="Like count")
+    varticle.add_argument("--comments", type=int, default=0, help="Comment count")
+
+    # voice analyze
+    voice_sub.add_parser("analyze", help="Analyze your voice from imported content")
+
+    # voice stats
+    voice_sub.add_parser("stats", help="Show imported content stats")
+
+    # Content types best practices
+    ctypes_parser = subparsers.add_parser("content-types", help="LinkedIn content type best practices")
+    ctypes_parser.add_argument("--type", "-t", choices=["post", "article", "newsletter", "comment"],
+                               help="Specific content type")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1341,6 +1525,21 @@ Examples:
             cmd_benchmark_context(args)
         else:
             benchmark_parser.print_help()
+
+    elif args.command == "voice":
+        if args.voice_command == "import-post":
+            cmd_voice_import_post(args)
+        elif args.voice_command == "import-article":
+            cmd_voice_import_article(args)
+        elif args.voice_command == "analyze":
+            cmd_voice_analyze(args)
+        elif args.voice_command == "stats":
+            cmd_voice_stats(args)
+        else:
+            voice_parser.print_help()
+
+    elif args.command == "content-types":
+        cmd_content_types(args)
 
 
 if __name__ == "__main__":

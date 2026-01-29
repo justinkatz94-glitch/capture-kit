@@ -1,0 +1,96 @@
+{
+  "name": "Tim Ensmann",
+  "username": "tim_ensmann",
+  "created_at": "2026-01-29",
+  "platform_handles": {
+    "twitter": "timensmann",
+    "linkedin": "tim-ensmann",
+    "instagram": "tim_ensmann"
+  },
+  "related_accounts": {
+    "instagram": ["boutiquehotelguy", "pinetreehotel", "secondhome.stays"],
+    "podcast_appearances": ["The Hotel Investor Playbook E55"]
+  },
+  "website": "https://boutiquehotelfund.com",
+  "niche": "hospitality_investing",
+  "niche_topics": [
+    "boutique hotels",
+    "real estate investing",
+    "short-term rentals",
+    "group bookings",
+    "alternative investments",
+    "hospitality operations"
+  ],
+  "benchmark_accounts": {
+    "twitter": [],
+    "linkedin": [],
+    "instagram": []
+  },
+  "goal": "build_authority",
+  "watchlist": [],
+  "keywords": [
+    "boutique hotel",
+    "STR",
+    "real estate",
+    "hospitality",
+    "group booking",
+    "event space",
+    "IRA investing",
+    "alternative assets",
+    "hotel acquisition"
+  ],
+  "voice": {
+    "tone": "conversational",
+    "formality": "casual",
+    "vocabulary": "accessible",
+    "emoji_style": "minimal",
+    "signature_phrases": [
+      "Here's the thing",
+      "We weren't selling nights. We were hosting events",
+      "The key is",
+      "What most people miss"
+    ],
+    "common_openers": [
+      "Story time",
+      "Here's what happened",
+      "Most people think",
+      "I learned this the hard way"
+    ],
+    "avoided_phrases": [
+      "synergy",
+      "leverage",
+      "ecosystem",
+      "disrupt"
+    ],
+    "writing_style": "narrative-driven, storytelling approach with personal anecdotes leading to business lessons"
+  },
+  "style": {
+    "sentence_length": "varied",
+    "punctuation": "standard",
+    "capitalization": "standard",
+    "uses_stories": true,
+    "builds_from_examples": true
+  },
+  "topics": {
+    "primary": [
+      "boutique hotel operations",
+      "group booking strategies",
+      "real estate acquisition"
+    ],
+    "secondary": [
+      "investment strategies",
+      "entrepreneurial philosophy",
+      "hospitality ROI"
+    ],
+    "expertise_level": "practitioner"
+  },
+  "engagement_style": {
+    "reply_preference": "story_first",
+    "debate_style": "example_driven",
+    "humor_level": "moderate",
+    "emoji_frequency": "minimal"
+  },
+  "location": "Tampa, Florida",
+  "company": "Boutique Hotel Fund",
+  "notes": "Focuses on boutique hospitality investments. Uses storytelling and case studies to teach business principles. Conversational tone that builds from specific examples to broader lessons."
+}

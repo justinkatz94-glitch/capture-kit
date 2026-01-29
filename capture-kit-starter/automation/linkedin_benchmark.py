@@ -55,9 +55,10 @@ class BenchmarkPost:
 @dataclass
 class BenchmarkAccount:
     """A tracked benchmark account."""
-    handle: str
+    handle: str  # LinkedIn username/slug (from URL)
     platform: str
-    name: str = ""
+    name: str = ""  # Display name
+    profile_url: str = ""  # Full LinkedIn profile URL
     bio: str = ""
     followers: int = 0
 
@@ -181,12 +182,13 @@ class LinkedInBenchmarkManager:
         """Get current benchmark data."""
         return self._benchmark
 
-    def add_account(self, handle: str, name: str = "") -> Dict[str, Any]:
+    def add_account(self, handle_or_url: str, name: str = "") -> Dict[str, Any]:
         """
         Add a benchmark account to track.
 
         Args:
-            handle: LinkedIn handle/username
+            handle_or_url: LinkedIn handle/username OR full profile URL
+                          e.g., "peraborstrom" or "https://linkedin.com/in/peraborstrom"
             name: Display name (optional)
 
         Returns:
@@ -195,7 +197,19 @@ class LinkedInBenchmarkManager:
         if not self._benchmark:
             return {"error": "No active user"}
 
-        clean_handle = handle.lstrip('@').strip()
+        # Parse LinkedIn URL if provided
+        profile_url = ""
+        clean_handle = handle_or_url.lstrip('@').strip()
+
+        if "linkedin.com" in clean_handle:
+            profile_url = clean_handle
+            # Extract handle from URL: linkedin.com/in/username
+            import re
+            match = re.search(r'linkedin\.com/in/([^/?]+)', clean_handle)
+            if match:
+                clean_handle = match.group(1)
+            else:
+                return {"error": "Could not parse LinkedIn URL. Use format: linkedin.com/in/username"}
 
         # Check if already tracked
         existing = [a for a in self._benchmark.accounts if a.handle == clean_handle]
@@ -207,6 +221,7 @@ class LinkedInBenchmarkManager:
             handle=clean_handle,
             platform="linkedin",
             name=name or clean_handle,
+            profile_url=profile_url or f"https://linkedin.com/in/{clean_handle}",
             added_at=now_iso(),
         )
 
@@ -268,6 +283,7 @@ class LinkedInBenchmarkManager:
             {
                 "handle": a.handle,
                 "name": a.name,
+                "profile_url": getattr(a, 'profile_url', f"https://linkedin.com/in/{a.handle}"),
                 "followers": a.followers,
                 "posts_analyzed": a.posts_analyzed,
                 "avg_engagement": a.avg_engagement,

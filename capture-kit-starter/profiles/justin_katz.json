@@ -10,8 +10,15 @@
     "institutional flow"
   ],
   "benchmark_accounts": {
-    "twitter": ["spotgamma", "SqueezeMetrics", "jam_croissant"],
-    "linkedin": ["peraborstrom", "kaborstrom"],
+    "twitter": [
+      "spotgamma",
+      "SqueezeMetrics",
+      "jam_croissant"
+    ],
+    "linkedin": [
+      "peraborstrom",
+      "kaborstrom"
+    ],
     "instagram": []
   },
   "voice": {
@@ -67,5 +74,6 @@
     "humor_level": "minimal",
     "emoji_frequency": "rare"
   },
-  "notes": "Focuses on options market structure and dealer positioning. Prefers data-driven analysis over speculation. Keeps replies concise and professional."
+  "notes": "Focuses on options market structure and dealer positioning. Prefers data-driven analysis over speculation. Keeps replies concise and professional.",
+  "updated_at": "2026-01-29T00:44:06.381300"
 }
