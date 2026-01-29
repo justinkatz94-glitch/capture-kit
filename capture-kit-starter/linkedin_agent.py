@@ -160,23 +160,46 @@ Since you haven't added benchmark posts yet, follow these general best practices
 
 1. SOUND EXACTLY LIKE THE USER - match their tone, vocabulary, and style
 2. NEVER use corporate jargon or LinkedIn cliches ("excited to announce", "thrilled", etc.)
-3. Be specific - use concrete examples, numbers, and real experiences
-4. Structure for mobile reading - short lines, clear breaks
-5. The first line must hook the reader (it shows in the feed preview)
-6. End with engagement - a question or invitation to discuss
-7. Show expertise through insight, not credentials
-8. Be authentic - LinkedIn rewards genuine voice over polished corporate speak
+3. Structure for mobile reading - short lines, clear breaks
+4. The first line must hook the reader (it shows in the feed preview)
+5. End with engagement - a question or invitation to discuss
+6. Show expertise through insight, not credentials
+7. Be authentic - LinkedIn rewards genuine voice over polished corporate speak
+
+## CRITICAL: AUTHENTICITY RULES
+
+**NEVER fabricate:**
+- Specific dollar amounts or financial results
+- Made-up stories or case studies
+- Fake statistics or data
+- Fictional experiences or deals
+
+**INSTEAD, generate:**
+- Frameworks and principles (use [X] placeholders for specific numbers)
+- Opinion pieces based on niche expertise
+- Educational content about industry best practices
+- Thought leadership on trends and concepts
+- Questions and discussion starters
+- Templates the user can fill with their real data
+
+If the content requires specific numbers or stories, use placeholders like:
+- "In my experience with [SPECIFIC DEAL/PROJECT]..."
+- "We saw [X]% improvement when..."
+- "After [X] years in [INDUSTRY]..."
+
+The user will fill in real details. Never invent them.
 """
 
         return prompt
 
-    def generate_post(self, topic: str, hook_type: str = None) -> dict:
+    def generate_post(self, topic: str, hook_type: str = None, facts: str = None) -> dict:
         """
         Generate an original LinkedIn post.
 
         Args:
             topic: Topic or theme for the post
             hook_type: Specific hook type (question, personal_story, contrarian, data, list)
+            facts: Real facts/experiences to base the post on (required for authentic content)
 
         Returns:
             Dict with post content and metadata
@@ -190,13 +213,32 @@ Since you haven't added benchmark posts yet, follow these general best practices
         if hook_type:
             hook_instruction = f"\nUse a {hook_type.upper()} hook specifically."
 
-        user_prompt = f"""Write an original LinkedIn post about: {topic}
+        # If facts provided, use them. Otherwise, generate framework content only.
+        if facts:
+            content_instruction = f"""
+REAL FACTS TO USE (provided by user - these are TRUE):
+{facts}
+
+Write a LinkedIn post using ONLY these facts. Do not invent additional details, numbers, or experiences.
+Transform these facts into an engaging LinkedIn post format."""
+        else:
+            content_instruction = """
+NO FACTS PROVIDED - Generate a FRAMEWORK post only.
+Use [BRACKETS] for any specific details the user needs to fill in:
+- [YOUR SPECIFIC RESULT]
+- [NUMBER] years/deals/properties
+- [YOUR EXPERIENCE WITH X]
+
+The user will fill in their real data. Do NOT invent specifics."""
+
+        user_prompt = f"""Write a LinkedIn post about: {topic}
 {hook_instruction}
+{content_instruction}
 
 The post should:
 1. Start with a compelling first line (this shows in the feed)
-2. Share genuine insight or experience related to {topic}
-3. Connect it to your expertise in {', '.join(self.profile.get('niche_topics', []))}
+2. Be structured for mobile reading (short paragraphs, line breaks)
+3. Connect it to expertise in {', '.join(self.profile.get('niche_topics', []))}
 4. End with something that invites discussion
 
 Provide your response as JSON:
@@ -206,7 +248,8 @@ Provide your response as JSON:
     "first_line": "just the first line",
     "word_count": number,
     "engagement_prediction": "low/medium/high",
-    "why": "why this post should resonate"
+    "why": "why this post should resonate",
+    "placeholders_to_fill": ["list of [BRACKETS] user needs to complete"]
 }}"""
 
         try:
@@ -518,6 +561,7 @@ Examples:
     post_parser.add_argument("--topic", "-t", required=True, help="Topic for the post")
     post_parser.add_argument("--hook", choices=["question", "personal_story", "contrarian", "data", "list", "bold_claim"],
                             help="Specific hook type to use")
+    post_parser.add_argument("--facts", "-f", help="Real facts/experiences to base the post on (for authentic content)")
 
     # Article command
     article_parser = subparsers.add_parser("article", help="Generate LinkedIn article")
@@ -579,14 +623,16 @@ Examples:
         print(f"Generating LinkedIn post about: {args.topic}")
         print("-" * 50)
 
-        result = agent.generate_post(args.topic, args.hook)
+        facts = getattr(args, 'facts', None)
+        result = agent.generate_post(args.topic, args.hook, facts)
 
         if "error" in result:
             print(f"[ERROR] {result['error']}")
             return
 
         print()
-        print(result.get("post", ""))
+        post_text = result.get("post", "").encode('ascii', 'replace').decode('ascii')
+        print(post_text)
         print()
         print("-" * 50)
         print(f"Hook: {result.get('hook_type', 'unknown')}")
