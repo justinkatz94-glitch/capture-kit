@@ -116,6 +116,7 @@ class UserManager:
         linkedin_handle: str = "",
         instagram_handle: str = "",
         niche: str = "",
+        niche_topics: List[str] = None,
         watchlist: List[str] = None,
         keywords: List[str] = None,
         goal: str = "grow_followers",
@@ -129,6 +130,7 @@ class UserManager:
             linkedin_handle: LinkedIn username
             instagram_handle: Instagram username
             niche: User's niche (fintwit, crypto, tech, etc.)
+            niche_topics: Specific topics ["options", "dealer positioning", "market structure"]
             watchlist: Accounts to monitor
             keywords: Niche keywords
             goal: User's goal (grow_followers, drive_traffic, build_authority)
@@ -154,10 +156,16 @@ class UserManager:
                 "instagram": instagram_handle.lstrip('@') if instagram_handle else "",
             },
             "niche": niche,
+            "niche_topics": niche_topics or niche_config.get("default_topics", []),
             "niche_config": f"niches/{niche}.json" if niche else "",
             "goal": goal,
             "watchlist": watchlist or niche_config.get("default_watchlist", []),
             "keywords": keywords or niche_config.get("keywords", []),
+            "benchmark_accounts": {
+                "twitter": niche_config.get("benchmark_accounts", {}).get("twitter", []),
+                "linkedin": niche_config.get("benchmark_accounts", {}).get("linkedin", []),
+                "instagram": niche_config.get("benchmark_accounts", {}).get("instagram", []),
+            },
             "voice": {
                 "tone": niche_config.get("tone", "professional"),
                 "formality": "balanced",
@@ -325,6 +333,132 @@ class UserManager:
             self._save_active_user()
 
         return {"status": "success", "deleted": name}
+
+    # =========================================================================
+    # BENCHMARK ACCOUNT MANAGEMENT
+    # =========================================================================
+
+    def add_benchmark_account(
+        self,
+        name: str,
+        handle: str,
+        platform: str = "linkedin"
+    ) -> Dict[str, Any]:
+        """
+        Add a benchmark account to track.
+
+        Args:
+            name: User name
+            handle: Account handle to add
+            platform: Platform (twitter, linkedin, instagram)
+
+        Returns:
+            Result dict
+        """
+        profile = self.get_profile(name)
+        if not profile:
+            return {"error": f"User '{name}' not found"}
+
+        # Initialize benchmark_accounts if not present
+        if "benchmark_accounts" not in profile:
+            profile["benchmark_accounts"] = {
+                "twitter": [],
+                "linkedin": [],
+                "instagram": [],
+            }
+
+        # Clean handle
+        clean_handle = handle.lstrip('@').strip()
+
+        # Check if already exists
+        if clean_handle in profile["benchmark_accounts"].get(platform, []):
+            return {"error": f"@{clean_handle} already in {platform} benchmarks"}
+
+        # Add to list
+        profile["benchmark_accounts"].setdefault(platform, []).append(clean_handle)
+        profile["updated_at"] = now_iso()
+
+        self.save_profile(profile)
+
+        return {
+            "status": "success",
+            "added": clean_handle,
+            "platform": platform,
+            "total_benchmarks": len(profile["benchmark_accounts"][platform]),
+        }
+
+    def remove_benchmark_account(
+        self,
+        name: str,
+        handle: str,
+        platform: str = "linkedin"
+    ) -> Dict[str, Any]:
+        """Remove a benchmark account."""
+        profile = self.get_profile(name)
+        if not profile:
+            return {"error": f"User '{name}' not found"}
+
+        clean_handle = handle.lstrip('@').strip()
+        benchmarks = profile.get("benchmark_accounts", {}).get(platform, [])
+
+        if clean_handle not in benchmarks:
+            return {"error": f"@{clean_handle} not in {platform} benchmarks"}
+
+        benchmarks.remove(clean_handle)
+        profile["updated_at"] = now_iso()
+
+        self.save_profile(profile)
+
+        return {
+            "status": "success",
+            "removed": clean_handle,
+            "platform": platform,
+            "remaining": len(benchmarks),
+        }
+
+    def list_benchmark_accounts(
+        self,
+        name: str,
+        platform: str = None
+    ) -> Dict[str, Any]:
+        """List benchmark accounts for a user."""
+        profile = self.get_profile(name)
+        if not profile:
+            return {"error": f"User '{name}' not found"}
+
+        benchmarks = profile.get("benchmark_accounts", {})
+
+        if platform:
+            return {
+                "platform": platform,
+                "accounts": benchmarks.get(platform, []),
+                "count": len(benchmarks.get(platform, [])),
+            }
+
+        return {
+            "all_platforms": benchmarks,
+            "counts": {p: len(accts) for p, accts in benchmarks.items()},
+        }
+
+    def set_niche_topics(
+        self,
+        name: str,
+        topics: List[str]
+    ) -> Dict[str, Any]:
+        """Set niche topics for a user."""
+        profile = self.get_profile(name)
+        if not profile:
+            return {"error": f"User '{name}' not found"}
+
+        profile["niche_topics"] = topics
+        profile["updated_at"] = now_iso()
+
+        self.save_profile(profile)
+
+        return {
+            "status": "success",
+            "niche_topics": topics,
+        }
 
 
 # =============================================================================

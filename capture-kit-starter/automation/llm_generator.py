@@ -2,6 +2,7 @@
 LLM Generator - Claude API integration for content generation
 
 Generates content using user's voice profile and benchmark patterns.
+FIXED: Added anti-hallucination safeguards for market data.
 """
 
 import os
@@ -17,6 +18,15 @@ from .schemas import (
 )
 from .content_analyzer import ContentAnalyzer, analyze_content
 from .user_manager import get_active_profile
+
+# Import LinkedIn benchmark (lazy to avoid circular imports)
+def _get_linkedin_benchmark_context(user_name: str = None) -> Dict[str, Any]:
+    """Get LinkedIn benchmark context for a user."""
+    try:
+        from .linkedin_benchmark import get_generation_context
+        return get_generation_context(user_name)
+    except ImportError:
+        return {}
 
 # Import platform adapters (lazy to avoid circular imports)
 def _get_platform_adapter(platform: str):
@@ -84,8 +94,33 @@ class LLMGenerator:
         """Check if LLM is available."""
         return self.client is not None
 
-    def _load_benchmark(self, name: str) -> Dict[str, Any]:
-        """Load benchmark data."""
+    def _load_benchmark(self, name: str, platform: str = "twitter", user_name: str = None) -> Dict[str, Any]:
+        """
+        Load benchmark data.
+
+        For LinkedIn, uses user-specific benchmark data if available.
+        For other platforms, uses general benchmark files.
+        """
+        # For LinkedIn, try to use user's LinkedIn benchmark
+        if platform == "linkedin":
+            linkedin_context = _get_linkedin_benchmark_context(user_name)
+            if linkedin_context.get("has_data"):
+                # Convert LinkedIn benchmark context to benchmark format
+                return {
+                    "patterns": {
+                        "optimal_length": linkedin_context.get("optimal_length", {}),
+                        "hooks": linkedin_context.get("effective_hooks", []),
+                        "top_topics": linkedin_context.get("top_topics", []),
+                    },
+                    "top_accounts": [
+                        {"username": ex.get("author"), "top_posts": [ex]}
+                        for ex in linkedin_context.get("examples", [])
+                    ],
+                    "style_notes": linkedin_context.get("style_notes", {}),
+                    "source": "user_linkedin_benchmark",
+                }
+
+        # Fall back to general benchmark file
         path = BENCHMARKS_DIR / f"{name}.json"
         if path.exists():
             return load_json(str(path))
@@ -174,17 +209,68 @@ Target post length: {platform_prefs.get('post_length', 240)} chars
 Optimize for: {goal_config.get('optimize_for', 'engagement')}
 Content focus: {goal_config.get('content_focus', '')}
 
-## RULES
+## CRITICAL RULES - DATA INTEGRITY
+
+**NEVER FABRICATE DATA OR STATISTICS:**
+- NEVER invent numbers, percentages, or statistics
+- NEVER say "data suggests", "studies show", or "historically" with made-up information  
+- NEVER claim to know current prices, levels, or market positioning
+- NEVER fabricate patterns like "70% of the time" or "this typically happens"
+- NEVER make up correlations or cause-effect relationships you don't have data for
+
+**YOU HAVE NO MARKET DATA. You only know what's in the original post.**
+
+## SAFE REPLY STRATEGIES
+
+Use these approaches that add value WITHOUT fabricating:
+
+1. **ASK A SMART QUESTION** - Shows expertise without claiming facts
+   - "What's your read on how this affects [related area]?"
+   - "Curious if you're seeing similar signals in [X]?"
+
+2. **SHARE PERSPECTIVE AS OPINION** - Frame as your view, not universal truth
+   - "My read on this..."
+   - "I'd be watching [X] closely here"
+   - "One way to think about this..."
+
+3. **AMPLIFY THEIR POINT** - Validate and reframe without adding fake data
+   - "This is the nuance most people miss"
+   - "Underrated point about [specific element]"
+   - "Worth emphasizing: [restate their insight differently]"
+
+4. **CONNECT TO RELATED CONCEPTS** - Link ideas the audience knows
+   - "This connects to [related concept]"
+   - "The [specific term] angle here is underappreciated"
+
+5. **OFFER ALTERNATIVE FRAMING** - Present as consideration, not fact
+   - "One thing I'd add to this framework..."
+   - "Playing devil's advocate - what if [scenario]?"
+
+## VOICE RULES
 
 1. SOUND EXACTLY LIKE THE USER - match their tone, vocabulary, and style
-2. Use techniques from benchmark data - these are proven to work
-3. Keep within platform length requirements
-4. Use the user's signature phrases naturally (don't force them)
-5. Include at least one emotional trigger (curiosity, FOMO, etc.)
-6. Start with a strong hook
-7. Be specific - use data, numbers, examples when possible
-8. Never be generic or corporate-sounding
-9. Match the energy of the niche"""
+2. Keep within platform length requirements
+3. Use the user's signature phrases naturally (don't force them)
+4. Include emotional engagement (curiosity, validation) through QUESTIONS not claims
+5. Start with something that hooks - a question, a reframe, a contrast
+6. Never be generic or corporate-sounding
+7. Match the energy of the niche
+
+## WHAT NOT TO DO
+
+❌ "Data suggests gamma flips at round numbers create momentum" (fabricated)
+❌ "This typically leads to 30% moves" (fabricated)
+❌ "70% of the time this setup resolves higher" (fabricated)
+❌ "Historically, dealer positioning at these levels..." (fabricated)
+
+## WHAT TO DO
+
+✅ "What's your read on how this plays out into OPEX?"
+✅ "The gamma flip angle here doesn't get enough attention"
+✅ "My read: worth watching the 5900 level closely"
+✅ "Curious if you're seeing this in other names too"
+✅ "This is the setup most people miss - the positioning context matters"
+"""
 
         return prompt
 
@@ -216,7 +302,8 @@ Content focus: {goal_config.get('content_focus', '')}
         if not profile:
             return [self._error_reply("No active user profile")]
 
-        benchmark = self._load_benchmark(benchmark_name)
+        user_name = profile.get("name")
+        benchmark = self._load_benchmark(benchmark_name, platform=platform, user_name=user_name)
         goal = profile.get("goal", "grow_followers")
 
         system_prompt = self._build_system_prompt(profile, benchmark, platform, goal)
@@ -226,23 +313,31 @@ Content focus: {goal_config.get('content_focus', '')}
 ORIGINAL POST by @{original_post.get('author', 'unknown')}:
 "{original_post.get('content', '')}"
 
+**IMPORTANT**: You have NO market data. Only reference information that appears in the original post above.
+
+For each reply, use a DIFFERENT strategy:
+- One should ASK A QUESTION
+- One should AMPLIFY/VALIDATE their point  
+- One should OFFER PERSPECTIVE (framed as opinion)
+
 For each reply, provide:
 1. The reply text (appropriate length for {platform})
-2. Hook type used (question, contrarian, data, story, callout, bold_claim)
-3. Primary emotional trigger (curiosity, FOMO, fear, greed, validation)
+2. Strategy used (question, amplify, perspective, connection, contrast)
+3. Primary emotional trigger (curiosity, validation, FOMO)
 4. Why this reply should work
 
 Format your response as JSON array:
 [
   {{
     "reply": "your reply text here",
+    "strategy": "question",
     "hook_type": "question",
     "trigger": "curiosity",
     "why": "explanation of why this works"
   }}
 ]
 
-Remember: Sound like ME, optimize like TOP PERFORMERS."""
+Remember: Sound like ME. Add value through ENGAGEMENT, not fabricated analysis."""
 
         try:
             response = self.client.messages.create(
@@ -278,7 +373,7 @@ Remember: Sound like ME, optimize like TOP PERFORMERS."""
                     id=generate_id(),
                     content=reply_content,
                     platform=platform,
-                    technique_label=self.analyzer.get_technique_label(analysis),
+                    technique_label=reply_data.get("strategy", self.analyzer.get_technique_label(analysis)),
                     hook_type=reply_data.get("hook_type", analysis.hook_type),
                     framework=analysis.framework,
                     triggers=[reply_data.get("trigger", "")] + analysis.triggers[:2],
@@ -467,7 +562,8 @@ Remember: Sound like ME, optimize like TOP PERFORMERS."""
         if not profile:
             return self._error_reply("No active user profile")
 
-        benchmark = self._load_benchmark(benchmark_name)
+        user_name = profile.get("name")
+        benchmark = self._load_benchmark(benchmark_name, platform=platform, user_name=user_name)
         goal = profile.get("goal", "grow_followers")
 
         system_prompt = self._build_system_prompt(profile, benchmark, platform, goal)
@@ -488,6 +584,8 @@ Remember: Sound like ME, optimize like TOP PERFORMERS."""
 {hook_instruction}
 {length_hint}
 
+**IMPORTANT**: Do not fabricate statistics or data. Share perspective, ask questions, or make observations - but don't invent numbers.
+
 Provide your response as JSON:
 {{
   "post": "your post text here",
@@ -496,7 +594,7 @@ Provide your response as JSON:
   "why": "why this post should perform well"
 }}
 
-Remember: Sound like ME, optimize like TOP PERFORMERS."""
+Remember: Sound like ME, optimize like TOP PERFORMERS. No fabricated data."""
 
         try:
             response = self.client.messages.create(

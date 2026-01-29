@@ -324,3 +324,73 @@ def analyze_reply_quality(
         analysis["suggestions"].append("Start with a question or bold statement for a stronger hook")
 
     return analysis
+
+
+def score_opportunity(post: Dict[str, Any]) -> float:
+    """
+    Score a post as a reply opportunity.
+
+    Factors:
+    - Author influence (follower count, engagement rate)
+    - Post engagement (likes, retweets, replies)
+    - Content relevance (topics, keywords)
+    - Timing (recency)
+
+    Args:
+        post: Post dict with content, author, engagement metrics
+
+    Returns:
+        Score 0-100
+    """
+    score = 50  # Start at neutral
+
+    content = post.get('content', post.get('text', '')).lower()
+
+    # Engagement metrics
+    likes = post.get('likes', post.get('like_count', 0)) or 0
+    retweets = post.get('retweets', post.get('retweet_count', 0)) or 0
+    replies = post.get('replies', post.get('reply_count', 0)) or 0
+
+    # High engagement = good opportunity
+    total_engagement = likes + retweets + replies
+    if total_engagement > 1000:
+        score += 20
+    elif total_engagement > 500:
+        score += 15
+    elif total_engagement > 100:
+        score += 10
+    elif total_engagement > 50:
+        score += 5
+
+    # Reply ratio - fewer replies = more opportunity
+    if total_engagement > 0:
+        reply_ratio = replies / total_engagement
+        if reply_ratio < 0.1:  # Low reply ratio = opportunity
+            score += 10
+        elif reply_ratio > 0.5:  # High reply ratio = crowded
+            score -= 5
+
+    # Topic relevance (fintwit topics)
+    fintwit_keywords = [
+        "spy", "spx", "qqq", "gamma", "options", "vol", "vix",
+        "dealer", "positioning", "flow", "dark pool", "0dte",
+        "opex", "expiration", "strike", "put", "call", "delta",
+        "market", "rally", "sell", "buy", "bull", "bear"
+    ]
+    keyword_matches = sum(1 for kw in fintwit_keywords if kw in content)
+    score += min(keyword_matches * 3, 15)
+
+    # Question posts are good for engagement
+    if '?' in content:
+        score += 8
+
+    # Thread starters (numbered posts)
+    if re.search(r'^1[./)]|1/\d|thread', content):
+        score += 5
+
+    # Data/charts mentioned
+    if any(word in content for word in ['chart', 'data', 'shows', 'level', '%']):
+        score += 5
+
+    # Clamp to 0-100
+    return max(0, min(100, score))

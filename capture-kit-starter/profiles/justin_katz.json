@@ -2,6 +2,18 @@
   "name": "Justin Katz",
   "username": "justin_katz",
   "created_at": "2026-01-28",
+  "niche": "fintwit",
+  "niche_topics": [
+    "options",
+    "dealer positioning",
+    "market structure",
+    "institutional flow"
+  ],
+  "benchmark_accounts": {
+    "twitter": ["spotgamma", "SqueezeMetrics", "jam_croissant"],
+    "linkedin": ["peraborstrom", "kaborstrom"],
+    "instagram": []
+  },
   "voice": {
     "tone": "professional",
     "formality": "balanced",

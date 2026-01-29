@@ -24,6 +24,7 @@ from automation.feedback_loop import FeedbackLoop
 from automation.voice_evolver import VoiceEvolver
 from automation.follow_targeting import FollowTargetingManager
 from automation.platforms import get_adapter, list_platforms
+from automation.linkedin_benchmark import LinkedInBenchmarkManager, BenchmarkPost
 
 
 def cmd_user_create(args):
@@ -808,6 +809,207 @@ def cmd_targets_settings(args):
             print(f"  {key}: {value}")
 
 
+# =============================================================================
+# BENCHMARK COMMANDS
+# =============================================================================
+
+def cmd_benchmark_add(args):
+    """Add a benchmark account."""
+    manager = LinkedInBenchmarkManager()
+    if not manager.user_name:
+        print("No active user. Create or switch to a user first.")
+        return
+
+    result = manager.add_account(args.handle, args.name or "")
+
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+
+    print(f"Added benchmark: @{result['added']}")
+    print(f"  Total accounts: {result['total_accounts']}")
+
+
+def cmd_benchmark_remove(args):
+    """Remove a benchmark account."""
+    manager = LinkedInBenchmarkManager()
+    if not manager.user_name:
+        print("No active user.")
+        return
+
+    result = manager.remove_account(args.handle)
+
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+
+    print(f"Removed: @{result['removed']}")
+
+
+def cmd_benchmark_list(args):
+    """List benchmark accounts."""
+    manager = LinkedInBenchmarkManager()
+    if not manager.user_name:
+        print("No active user.")
+        return
+
+    accounts = manager.list_accounts()
+
+    if not accounts:
+        print("No benchmark accounts.")
+        print("Add accounts with: benchmark add @handle")
+        return
+
+    print(f"LinkedIn Benchmark Accounts ({len(accounts)}):\n")
+    for acct in accounts:
+        posts = acct.get('posts_analyzed', 0)
+        print(f"  @{acct['handle']}")
+        if acct.get('name') and acct['name'] != acct['handle']:
+            print(f"      Name: {acct['name']}")
+        print(f"      Posts analyzed: {posts}")
+        if acct.get('last_scanned'):
+            print(f"      Last scanned: {acct['last_scanned'][:10]}")
+
+
+def cmd_benchmark_add_post(args):
+    """Add a post to benchmark data."""
+    manager = LinkedInBenchmarkManager()
+    if not manager.user_name:
+        print("No active user.")
+        return
+
+    post = BenchmarkPost(
+        id="",
+        author=args.author.lstrip('@'),
+        platform="linkedin",
+        content=args.content,
+        url=args.url or "",
+        likes=args.likes or 0,
+        comments=args.comments or 0,
+        shares=args.shares or 0,
+    )
+
+    result = manager.add_post(post)
+
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+
+    print(f"Added post from @{result['author']}")
+    print(f"  Hook type: {result['hook_type']}")
+    print(f"  Post ID: {result['post_id']}")
+
+
+def cmd_benchmark_patterns(args):
+    """Show extracted patterns."""
+    manager = LinkedInBenchmarkManager()
+    if not manager.user_name:
+        print("No active user.")
+        return
+
+    patterns = manager.get_patterns()
+
+    if not patterns:
+        print("No patterns extracted yet.")
+        print("Add posts with: benchmark add-post --author @handle --content '...'")
+        return
+
+    print("LinkedIn Benchmark Patterns")
+    print(f"{'='*50}")
+    print(f"Total posts analyzed: {patterns.get('total_posts', 0)}")
+    print()
+
+    # Optimal length
+    length = patterns.get('optimal_length', {})
+    print(f"Optimal post length: {length.get('avg', 0)} words")
+    print(f"  Range: {length.get('min', 0)} - {length.get('max', 0)} words")
+    print()
+
+    # Hook types
+    hooks = patterns.get('hook_types', {})
+    if hooks:
+        print("Effective hooks:")
+        for hook, count in list(hooks.items())[:5]:
+            print(f"  - {hook}: {count} posts")
+    print()
+
+    # Style
+    print("Style patterns:")
+    print(f"  Line breaks: {patterns.get('line_break_usage', 0)}% of posts")
+    print(f"  Emoji usage: {patterns.get('emoji_usage', 0)}% of posts")
+    print(f"  Hashtags: {patterns.get('hashtag_usage', 0)}% of posts")
+    print()
+
+    # Top topics
+    topics = patterns.get('top_topics', {})
+    if topics:
+        print("Top topics:")
+        for topic, count in list(topics.items())[:5]:
+            print(f"  - {topic}: {count} mentions")
+
+
+def cmd_benchmark_stats(args):
+    """Show benchmark statistics."""
+    manager = LinkedInBenchmarkManager()
+    if not manager.user_name:
+        print("No active user.")
+        return
+
+    stats = manager.get_stats()
+
+    if "error" in stats:
+        print(f"Error: {stats['error']}")
+        return
+
+    print("LinkedIn Benchmark Stats")
+    print(f"{'='*50}")
+    print(f"User: {stats['user']}")
+    print(f"Niche: {stats['niche']}")
+    print(f"Topics: {', '.join(stats.get('niche_topics', []))}")
+    print()
+    print(f"Accounts tracked: {stats['accounts_tracked']}")
+    print(f"Posts analyzed: {stats['total_posts_analyzed']}")
+    print(f"Last updated: {stats['updated_at'][:10] if stats.get('updated_at') else 'never'}")
+
+
+def cmd_benchmark_context(args):
+    """Show generation context (what LLM sees)."""
+    manager = LinkedInBenchmarkManager()
+    if not manager.user_name:
+        print("No active user.")
+        return
+
+    context = manager.get_generation_context()
+
+    if not context.get('has_data'):
+        print(context.get('message', 'No benchmark data'))
+        return
+
+    print("LLM Generation Context")
+    print(f"{'='*50}")
+    print(f"Niche: {context['niche']}")
+    print(f"Topics: {', '.join(context['niche_topics'])}")
+    print()
+    print(f"Optimal length: {context['optimal_length'].get('avg', 0)} words")
+    print(f"Effective hooks: {', '.join(context['effective_hooks'])}")
+    print(f"Top topics: {', '.join(context['top_topics'])}")
+    print()
+    print("Style recommendations:")
+    style = context['style_notes']
+    print(f"  Use line breaks: {'Yes' if style['use_line_breaks'] else 'No'}")
+    print(f"  Use emoji: {'Yes' if style['use_emoji'] else 'No'}")
+    print(f"  Use hashtags: {'Yes' if style['use_hashtags'] else 'No'}")
+    print()
+    print(f"Based on {context['total_posts_analyzed']} posts from {context['accounts_tracked']} accounts")
+
+    if context.get('examples'):
+        print()
+        print("Example posts:")
+        for i, ex in enumerate(context['examples'][:2], 1):
+            print(f"\n  {i}. @{ex['author']} ({ex['engagement']} likes)")
+            print(f"     {ex['content'][:150]}...")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Capture Kit - Social Media Automation CLI",
@@ -991,6 +1193,40 @@ Examples:
     tsettings = targets_sub.add_parser("settings", help="View/update settings")
     tsettings.add_argument("--days", type=int, help="Set followback check days")
 
+    # Benchmark commands (LinkedIn)
+    benchmark_parser = subparsers.add_parser("benchmark", help="LinkedIn benchmark management")
+    benchmark_sub = benchmark_parser.add_subparsers(dest="benchmark_command")
+
+    # benchmark add
+    badd = benchmark_sub.add_parser("add", help="Add benchmark account")
+    badd.add_argument("handle", help="LinkedIn handle")
+    badd.add_argument("--name", help="Display name")
+
+    # benchmark remove
+    bremove = benchmark_sub.add_parser("remove", help="Remove benchmark account")
+    bremove.add_argument("handle", help="LinkedIn handle")
+
+    # benchmark list
+    benchmark_sub.add_parser("list", help="List benchmark accounts")
+
+    # benchmark add-post
+    baddpost = benchmark_sub.add_parser("add-post", help="Add post to benchmark")
+    baddpost.add_argument("--author", required=True, help="Post author")
+    baddpost.add_argument("--content", required=True, help="Post content")
+    baddpost.add_argument("--url", help="Post URL")
+    baddpost.add_argument("--likes", type=int, default=0, help="Like count")
+    baddpost.add_argument("--comments", type=int, default=0, help="Comment count")
+    baddpost.add_argument("--shares", type=int, default=0, help="Share count")
+
+    # benchmark patterns
+    benchmark_sub.add_parser("patterns", help="Show extracted patterns")
+
+    # benchmark stats
+    benchmark_sub.add_parser("stats", help="Show benchmark statistics")
+
+    # benchmark context
+    benchmark_sub.add_parser("context", help="Show LLM generation context")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1087,6 +1323,24 @@ Examples:
             cmd_targets_settings(args)
         else:
             targets_parser.print_help()
+
+    elif args.command == "benchmark":
+        if args.benchmark_command == "add":
+            cmd_benchmark_add(args)
+        elif args.benchmark_command == "remove":
+            cmd_benchmark_remove(args)
+        elif args.benchmark_command == "list":
+            cmd_benchmark_list(args)
+        elif args.benchmark_command == "add-post":
+            cmd_benchmark_add_post(args)
+        elif args.benchmark_command == "patterns":
+            cmd_benchmark_patterns(args)
+        elif args.benchmark_command == "stats":
+            cmd_benchmark_stats(args)
+        elif args.benchmark_command == "context":
+            cmd_benchmark_context(args)
+        else:
+            benchmark_parser.print_help()
 
 
 if __name__ == "__main__":

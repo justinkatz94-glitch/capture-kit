@@ -82,11 +82,17 @@ USER_PROFILE_SCHEMA = {
         "linkedin": str,
         "instagram": str,
     },
-    "niche": str,
+    "niche": str,  # Primary niche category (fintwit, crypto, tech)
+    "niche_topics": List[str],  # Specific topics: ["options", "dealer positioning", "market structure"]
     "niche_config": str,  # Path to niche config file
     "goal": str,  # Goal enum value
     "watchlist": List[str],  # Accounts to monitor
     "keywords": List[str],  # Niche keywords
+    "benchmark_accounts": {  # Per-platform benchmark accounts
+        "twitter": List[str],
+        "linkedin": List[str],
+        "instagram": List[str],
+    },
     "voice": {
         "tone": str,
         "formality": str,
