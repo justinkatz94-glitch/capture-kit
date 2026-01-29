@@ -192,14 +192,15 @@ The user will fill in real details. Never invent them.
 
         return prompt
 
-    def generate_post(self, topic: str, hook_type: str = None, facts: str = None) -> dict:
+    def generate_post(self, topic: str, hook_type: str = None, facts: str = None, research: bool = True) -> dict:
         """
         Generate an original LinkedIn post.
 
         Args:
             topic: Topic or theme for the post
             hook_type: Specific hook type (question, personal_story, contrarian, data, list)
-            facts: Real facts/experiences to base the post on (required for authentic content)
+            facts: Real facts/experiences to base the post on
+            research: Whether to research the topic for factual accuracy
 
         Returns:
             Dict with post content and metadata
@@ -213,23 +214,45 @@ The user will fill in real details. Never invent them.
         if hook_type:
             hook_instruction = f"\nUse a {hook_type.upper()} hook specifically."
 
-        # If facts provided, use them. Otherwise, generate framework content only.
+        # Build content instruction based on what we have
+        content_instruction = """
+## AUTHENTICITY REQUIREMENTS - CRITICAL
+
+You MUST follow these rules:
+
+1. PERSONAL CLAIMS: Only make personal claims (I did, we achieved, my results) if USER FACTS are provided below.
+
+2. INDUSTRY FACTS: For general industry statistics or facts, only use information that is:
+   - Common knowledge in the industry
+   - Clearly labeled as "industry average" or "typically"
+   - Not attributed to specific sources you can't verify
+
+3. NEVER FABRICATE:
+   - Specific dollar amounts for personal results
+   - Percentage improvements for personal projects
+   - Dates, timelines, or project details
+   - Quotes or statements from other people
+   - Statistics without noting they are estimates
+
+4. WHEN IN DOUBT: Use qualifiers like "in my experience", "typically", "often", "many investors find"
+"""
+
         if facts:
-            content_instruction = f"""
-REAL FACTS TO USE (provided by user - these are TRUE):
+            content_instruction += f"""
+## USER-PROVIDED FACTS (verified - use these):
 {facts}
 
-Write a LinkedIn post using ONLY these facts. Do not invent additional details, numbers, or experiences.
-Transform these facts into an engaging LinkedIn post format."""
+Write the post using these facts. You may expand on them but do not invent additional specific claims."""
         else:
-            content_instruction = """
-NO FACTS PROVIDED - Generate a FRAMEWORK post only.
-Use [BRACKETS] for any specific details the user needs to fill in:
-- [YOUR SPECIFIC RESULT]
-- [NUMBER] years/deals/properties
-- [YOUR EXPERIENCE WITH X]
+            content_instruction += """
+## NO PERSONAL FACTS PROVIDED
 
-The user will fill in their real data. Do NOT invent specifics."""
+Since no personal facts were provided:
+- Focus on FRAMEWORKS, PRINCIPLES, and OPINIONS
+- Use "in my experience" or "what I've observed" for general statements
+- Do NOT claim specific personal results or numbers
+- Ask questions rather than make claims you can't verify
+- Share perspective and expertise, not fabricated case studies"""
 
         user_prompt = f"""Write a LinkedIn post about: {topic}
 {hook_instruction}
@@ -240,6 +263,7 @@ The post should:
 2. Be structured for mobile reading (short paragraphs, line breaks)
 3. Connect it to expertise in {', '.join(self.profile.get('niche_topics', []))}
 4. End with something that invites discussion
+5. BE 100% AUTHENTIC - no fabricated claims
 
 Provide your response as JSON:
 {{
@@ -249,7 +273,7 @@ Provide your response as JSON:
     "word_count": number,
     "engagement_prediction": "low/medium/high",
     "why": "why this post should resonate",
-    "placeholders_to_fill": ["list of [BRACKETS] user needs to complete"]
+    "fact_check_notes": ["any claims that should be verified", "or 'all claims are general industry knowledge'"]
 }}"""
 
         try:
@@ -641,6 +665,14 @@ Examples:
         print(f"Engagement Prediction: {result.get('engagement_prediction', 'unknown')}")
         print()
         print(f"Why: {result.get('why', '')}")
+
+        # Show fact check notes
+        fact_notes = result.get('fact_check_notes', [])
+        if fact_notes:
+            print()
+            print("Fact Check Notes:")
+            for note in fact_notes:
+                print(f"  - {note}")
 
     elif args.command == "article":
         if not agent.is_available:
